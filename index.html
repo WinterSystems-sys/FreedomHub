@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FreedomHub</title>
+
+<style>
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial, sans-serif;
+}
+
+body{
+background:#111;
+color:white;
+}
+
+header{
+background:#191919;
+padding:15px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+position:sticky;
+top:0;
+}
+
+.logo{
+font-size:24px;
+font-weight:bold;
+color:#4da3ff;
+}
+
+.search{
+width:50%;
+padding:8px;
+border:none;
+border-radius:8px;
+}
+
+.page{
+padding:15px;
+padding-bottom:80px;
+}
+
+.card{
+background:#1d1d1d;
+padding:15px;
+border-radius:12px;
+margin-bottom:15px;
+}
+
+.video{
+height:220px;
+background:#333;
+display:flex;
+align-items:center;
+justify-content:center;
+border-radius:12px;
+margin:10px 0;
+}
+
+.btn{
+background:#4da3ff;
+border:none;
+padding:8px 12px;
+color:white;
+border-radius:8px;
+margin:5px;
+}
+
+textarea,input{
+width:100%;
+padding:10px;
+margin:10px 0;
+border:none;
+border-radius:8px;
+}
+
+.hidden{
+display:none;
+}
+
+.avatar{
+width:120px;
+height:120px;
+border-radius:50%;
+background:linear-gradient(45deg,#4da3ff,#8b5cf6);
+margin:auto;
+}
+
+.profile{
+text-align:center;
+}
+
+.stats{
+display:flex;
+justify-content:space-around;
+margin-top:20px;
+}
+
+nav{
+position:fixed;
+bottom:0;
+width:100%;
+background:#191919;
+display:flex;
+justify-content:space-around;
+padding:12px;
+}
+
+nav button{
+background:none;
+color:white;
+border:none;
+}
+
+.comment{
+background:#333;
+padding:8px;
+border-radius:8px;
+margin-top:5px;
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="logo">FreedomHub</div>
+<input class="search" placeholder="Search">
+</header>
+
+<div id="home" class="page">
+
+<div class="card">
+<h2>Create Post</h2>
+
+<textarea
+id="postText"
+placeholder="What's happening?">
+</textarea>
+
+<button class="btn"
+onclick="createPost()">
+Post
+</button>
+</div>
+
+<div id="feed">
+
+<div class="card">
+
+<h3>@FreedomCreator</h3>
+
+<p>Welcome to FreedomHub.</p>
+
+<div class="video">
+VIDEO POST
+</div>
+
+<button class="btn"
+onclick="like(this)">
+❤️ Like
+</button>
+
+<span>0</span>
+
+<button class="btn"
+onclick="sharePost()">
+🔗 Share
+</button>
+
+<input
+placeholder="Comment..."
+onkeydown="addComment(event,this)">
+
+<div></div>
+
+</div>
+
+</div>
+
+</div>
+
+<div id="explore"
+class="page hidden">
+
+<div class="card">
+<h2>Trending</h2>
+
+<p>#Technology</p>
+<p>#Gaming</p>
+<p>#News</p>
+<p>#Sports</p>
+<p>#Science</p>
+
+</div>
+
+</div>
+
+<div id="profile"
+class="page hidden">
+
+<div class="profile">
+
+<div class="avatar"></div>
+
+<h2>@YourProfile</h2>
+
+<p>Building something amazing.</p>
+
+<div class="stats">
+
+<div>
+<h3>12</h3>
+Posts
+</div>
+
+<div>
+<h3>141</h3>
+Followers
+</div>
+
+<div>
+<h3>88</h3>
+Following
+</div>
+
+</div>
+
+</div>
+
+<br>
+
+<div class="card">
+
+<h3>My Videos</h3>
+
+<div class="video">
+Video 1
+</div>
+
+<div class="video">
+Video 2
+</div>
+
+</div>
+
+</div>
+
+<div id="notifications"
+class="page hidden">
+
+<div class="card">
+
+<h2>Notifications</h2>
+
+<p>❤️ Someone liked your post.</p>
+
+<br>
+
+<p>💬 New comment.</p>
+
+<br>
+
+<p>👤 New follower.</p>
+
+</div>
+
+</div>
+
+<nav>
+
+<button onclick="showPage('home')">
+🏠 Home
+</button>
+
+<button onclick="showPage('explore')">
+🔥 Explore
+</button>
+
+<button onclick="showPage('profile')">
+👤 Profile
+</button>
+
+<button onclick="showPage('notifications')">
+🔔 Alerts
+</button>
+
+</nav>
+
+<script>
+
+function showPage(page){
+
+document.getElementById('home').classList.add('hidden');
+document.getElementById('explore').classList.add('hidden');
+document.getElementById('profile').classList.add('hidden');
+document.getElementById('notifications').classList.add('hidden');
+
+document.getElementById(page).classList.remove('hidden');
+
+}
+
+function like(btn){
+
+const likes=btn.nextElementSibling;
+
+likes.innerText=
+parseInt(likes.innerText)+1;
+
+}
+
+function sharePost(){
+
+alert("Share feature coming soon.");
+
+}
+
+function addComment(event,input){
+
+if(event.key==="Enter"){
+
+const box=input.nextElementSibling;
+
+const comment=
+document.createElement("div");
+
+comment.className="comment";
+
+comment.innerText=input.value;
+
+box.appendChild(comment);
+
+input.value="";
+
+}
+
+}
+
+function createPost(){
+
+const text=
+document.getElementById("postText").value;
+
+if(text==="") return;
+
+const card=
+document.createElement("div");
+
+card.className="card";
+
+card.innerHTML=`
+
+<h3>@YourProfile</h3>
+
+<p>${text}</p>
+
+<button class="btn"
+onclick="like(this)">
+❤️ Like
+</button>
+
+<span>0</span>
+
+<button class="btn"
+onclick="sharePost()">
+🔗 Share
+</button>
+
+<input placeholder="Comment..."
+onkeydown="addComment(event,this)">
+
+<div></div>
+`;
+
+document
+.getElementById("feed")
+.prepend(card);
+
+document
+.getElementById("postText")
+.value="";
+
+}
+
+</script>
+
+</body>
+  </html>
+  
