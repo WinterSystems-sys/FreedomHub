@@ -74,6 +74,15 @@
       border: 3px solid #a855f7;
       box-shadow: 0 0 15px rgba(168, 85, 247, 0.6);
     }
+    .creator-link {
+      color: #38bdf8;
+      font-weight: bold;
+      cursor: pointer;
+      text-decoration: underline;
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 14px;
+    }
     .stats-container {
       display: flex;
       justify-content: space-around;
@@ -155,6 +164,8 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    let allPostsData = [];
+
     window.showPage = function(pageId) {
       document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
       document.getElementById(pageId).classList.remove('hidden');
@@ -196,7 +207,7 @@
     };
 
     window.saveProfile = async function() {
-      const username = document.getElementById('username').value;
+      const username = document.getElementById('username').value || 'Anonymous';
       const bio = document.getElementById('bio').value;
       const avatarUrl = localStorage.getItem('savedAvatarUrl') || '';
 
@@ -206,6 +217,7 @@
           bio: bio,
           avatarUrl: avatarUrl
         }, { merge: true });
+        localStorage.setItem('currentUsername', username);
         alert('Profile saved globally!');
       } catch (err) {
         alert('Error saving profile: ' + err.message);
@@ -215,9 +227,10 @@
     window.uploadVideo = async function() {
       const fileInput = document.getElementById('videoFileInput');
       const titleInput = document.getElementById('videoTitle');
+      const creatorName = localStorage.getItem('currentUsername') || document.getElementById('username').value || 'Anonymous';
 
       if (!fileInput.files[0]) {
-        alert('Please select a video file.');
+        alert('Please select or record a video file.');
         return;
       }
 
@@ -229,6 +242,7 @@
 
         await addDoc(collection(db, "posts"), {
           title: titleInput.value || 'Untitled Video',
+          creator: creatorName,
           videoUrl: videoUrl,
           likes: 0,
           comments: [],
@@ -253,7 +267,7 @@
           likes: increment(1)
         });
         loadFeed();
-        loadProfileData(); // Re-calculate top video after likes change
+        loadProfileData();
       } catch (err) {
         console.error(err);
       }
@@ -275,6 +289,78 @@
       }
     };
 
+    // OPEN CREATOR CHANNEL OVERLAY
+    window.openChannel = function(creatorName) {
+      document.getElementById('channelName').innerText = `@${creatorName}`;
+      
+      const channelVideos = allPostsData.filter(p => (p.creator || 'Anonymous').toLowerCase() === creatorName.toLowerCase());
+      const container = document.getElementById('channelVideosContainer');
+      
+      if (channelVideos.length === 0) {
+        container.innerHTML = '<p style="font-size:13px; color:#aaa;">No public videos found for this creator.</p>';
+      } else {
+        container.innerHTML = channelVideos.map(v => `
+          <div style="margin-top:10px; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px;">
+            <p style="font-size:13px; margin:0 0 5px 0;">${v.title}</p>
+            <video src="${v.videoUrl}" controls style="width:100%; border-radius:4px;"></video>
+          </div>
+        `).join('');
+      }
+
+      showPage('channelOverlay');
+    };
+
+    // RENDER FEED CARDS
+    function renderFeedItems(posts) {
+      const feed = document.getElementById('feed');
+      if (posts.length === 0) {
+        feed.innerHTML = '<p>No matching videos or creators found.</p>';
+        return;
+      }
+
+      feed.innerHTML = '';
+      posts.forEach((item) => {
+        const data = item.data;
+        const id = item.id;
+        const creator = data.creator || 'Anonymous';
+        const commentsList = data.comments ? data.comments.map(c => `<div class="comment-item">${c}</div>`).join('') : '';
+
+        const post = document.createElement('div');
+        post.className = 'card';
+        post.innerHTML = `
+          <h3 style="margin-bottom:2px;">${data.title}</h3>
+          <span class="creator-link" onclick="openChannel('${creator}')">By @${creator}</span>
+          <video src="${data.videoUrl}" controls style="width:100%; border-radius: 8px; margin-top:8px;"></video>
+          <div style="margin-top:8px;">
+            <button class="action-btn" onclick="likePost('${id}')">❤️ Like (${data.likes || 0})</button>
+          </div>
+          <div class="comment-box">
+            <input type="text" id="comment-input-${id}" placeholder="Add a comment...">
+            <button class="action-btn" onclick="addComment('${id}')">Post Comment</button>
+            <div style="margin-top:10px;">${commentsList}</div>
+          </div>
+        `;
+        feed.appendChild(post);
+      });
+    }
+
+    // SEARCH FILTER
+    window.filterFeed = function() {
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      if (!query) {
+        renderFeedItems(allPostsData);
+        return;
+      }
+
+      const filtered = allPostsData.filter(item => {
+        const titleMatch = (item.data.title || '').toLowerCase().includes(query);
+        const creatorMatch = (item.data.creator || 'Anonymous').toLowerCase().includes(query);
+        return titleMatch || creatorMatch;
+      });
+
+      renderFeedItems(filtered);
+    };
+
     async function loadFeed() {
       const feed = document.getElementById('feed');
       feed.innerHTML = '<p>Loading galaxy stream...</p>';
@@ -286,44 +372,28 @@
           return;
         }
 
-        feed.innerHTML = '';
+        allPostsData = [];
         querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const id = docSnap.id;
-          const commentsList = data.comments ? data.comments.map(c => `<div class="comment-item">${c}</div>`).join('') : '';
-
-          const post = document.createElement('div');
-          post.className = 'card';
-          post.innerHTML = `
-            <h3>${data.title}</h3>
-            <video src="${data.videoUrl}" controls style="width:100%; border-radius: 8px;"></video>
-            <div style="margin-top:8px;">
-              <button class="action-btn" onclick="likePost('${id}')">❤️ Like (${data.likes || 0})</button>
-            </div>
-            <div class="comment-box">
-              <input type="text" id="comment-input-${id}" placeholder="Add a comment...">
-              <button class="action-btn" onclick="addComment('${id}')">Post Comment</button>
-              <div style="margin-top:10px;">${commentsList}</div>
-            </div>
-          `;
-          feed.appendChild(post);
+          allPostsData.push({ id: docSnap.id, data: docSnap.data() });
         });
+
+        renderFeedItems(allPostsData);
       } catch (err) {
         feed.innerHTML = '<p>Error loading posts.</p>';
       }
     }
 
-    // ANALYZES POSTS & SETS THE MOST LIKED VIDEO AS TOP VIDEO
     async function loadProfileData() {
       try {
-        // Load User Profile Data
         const docSnap = await getDoc(doc(db, "profiles", "myUser"));
         if (docSnap.exists()) {
           const data = docSnap.data();
-          document.getElementById('username').value = data.username || '';
+          const username = data.username || 'Anonymous';
+          document.getElementById('username').value = username;
           document.getElementById('bio').value = data.bio || '';
           document.getElementById('stat-followers').innerText = data.followersCount || 0;
           document.getElementById('stat-following').innerText = data.followingCount || 0;
+          localStorage.setItem('currentUsername', username);
 
           if (data.avatarUrl) {
             document.querySelector('.profile-avatar').style.backgroundImage = `url(${data.avatarUrl})`;
@@ -331,7 +401,6 @@
           }
         }
 
-        // Analyze Posts to Find Top Video & Total Stats
         const postsSnapshot = await getDocs(collection(db, "posts"));
         let totalLikes = 0;
         let totalVideos = postsSnapshot.size;
@@ -349,11 +418,9 @@
           }
         });
 
-        // Set Calculated Stats
         document.getElementById('stat-likes').innerText = totalLikes;
         document.getElementById('stat-videos').innerText = totalVideos;
 
-        // Set Most Liked Video as Top Video
         if (topPost) {
           document.getElementById('topVideoSection').classList.remove('hidden');
           document.getElementById('topVideoTitle').innerText = `${topPost.title} (${maxLikes} Likes)`;
@@ -377,17 +444,21 @@
   <!-- HOME FEED PAGE -->
   <div id="home" class="page">
     <h2>Galaxy Feed</h2>
-    <div id="feed">
+    
+    <!-- SEARCH BAR -->
+    <input type="text" id="searchInput" placeholder="🔍 Search songs or creators..." onkeyup="filterFeed()">
+    
+    <div id="feed" style="margin-top: 15px;">
       <p>Loading...</p>
     </div>
   </div>
 
-  <!-- UPLOAD PAGE -->
+  <!-- UPLOAD PAGE WITH DIRECT CAMERA CAPTURE -->
   <div id="upload" class="page hidden">
     <div class="card">
-      <h2>Upload Video File</h2>
-      <input type="file" id="videoFileInput" accept="video/*">
-      <input type="text" id="videoTitle" placeholder="Video Title">
+      <h2>Record or Upload Video</h2>
+      <input type="file" id="videoFileInput" accept="video/*" capture="environment">
+      <input type="text" id="videoTitle" placeholder="Video / Song Title">
       <button onclick="uploadVideo()">Launch Video</button>
     </div>
   </div>
@@ -397,7 +468,6 @@
     <div class="profile-avatar" onclick="pickAvatar()"></div>
     <p class="center" style="font-size: 11px; color: #a78bfa;">Tap icon to change photo</p>
     
-    <!-- DASHBOARD STATS -->
     <div class="stats-container">
       <div class="stat-box">
         <div class="stat-num" id="stat-videos">0</div>
@@ -417,18 +487,29 @@
       </div>
     </div>
 
-    <!-- AUTOMATIC MOST-LIKED TOP VIDEO -->
     <div id="topVideoSection" class="card hidden">
       <h3 style="margin-top:0; color:#38bdf8;">🔥 Top Video</h3>
       <p id="topVideoTitle" style="font-size:14px; margin-bottom:8px;"></p>
       <video id="topVideoPlayer" controls style="width:100%; border-radius: 6px;"></video>
     </div>
 
-    <!-- PROFILE INPUTS -->
     <div class="card">
       <input type="text" id="username" placeholder="Username">
       <textarea id="bio" placeholder="Tell people about yourself"></textarea>
       <button onclick="saveProfile()">Save Profile</button>
+    </div>
+  </div>
+
+  <!-- CHANNEL OVERLAY PAGE -->
+  <div id="channelOverlay" class="page hidden">
+    <button class="action-btn" onclick="showPage('home')" style="margin-bottom:15px;">← Back to Feed</button>
+    <div class="card">
+      <h2 id="channelName" style="margin-top:0; color:#38bdf8;">@Creator</h2>
+      <button class="action-btn">Follow</button>
+    </div>
+    <div class="card">
+      <h3>Uploaded Videos</h3>
+      <div id="channelVideosContainer"></div>
     </div>
   </div>
 
@@ -444,3 +525,4 @@
 
 </body>
 </html>
+
