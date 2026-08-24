@@ -62,6 +62,13 @@
     button:active {
       transform: scale(0.98);
     }
+    .btn-google {
+      background: #ea4335;
+      margin-top: 10px;
+    }
+    .btn-secondary {
+      background: #334155;
+    }
     .profile-avatar {
       width: 110px;
       height: 110px;
@@ -146,6 +153,7 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, arrayUnion, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
     const CLOUD_NAME = "Ee4kulds";
     const UPLOAD_PRESET = "nzhyyeps";
@@ -161,17 +169,79 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
+    const googleProvider = new GoogleAuthProvider();
 
+    let currentUser = null;
     let allPostsData = [];
 
-    function getUserId() {
-      let uid = localStorage.getItem('fh_user_id');
-      if (!uid) {
-        uid = 'user_' + Math.random().toString(36).substring(2, 9);
-        localStorage.setItem('fh_user_id', uid);
+    // AUTH STATE LISTENER
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        currentUser = user;
+        document.getElementById('authScreen').classList.add('hidden');
+        document.getElementById('mainNavigation').classList.remove('hidden');
+        showPage('home');
+        await loadProfileData();
+        await loadFeed();
+      } else {
+        currentUser = null;
+        document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
+        document.getElementById('authScreen').classList.remove('hidden');
+        document.getElementById('mainNavigation').classList.add('hidden');
       }
-      return uid;
-    }
+    });
+
+    // EMAIL REGISTER / LOGIN
+    window.handleEmailAuth = async function(type) {
+      const email = document.getElementById('authEmail').value.trim();
+      const password = document.getElementById('authPassword').value.trim();
+
+      if (!email || !password) {
+        alert('Please enter both email and password.');
+        return;
+      }
+
+      try {
+        if (type === 'register') {
+          const res = await createUserWithEmailAndPassword(auth, email, password);
+          const defaultUsername = email.split('@')[0];
+          await setDoc(doc(db, "profiles", res.user.uid), {
+            username: defaultUsername,
+            bio: '',
+            avatarUrl: ''
+          });
+        } else {
+          await signInWithEmailAndPassword(auth, email, password);
+        }
+      } catch (err) {
+        alert('Authentication Error: ' + err.message);
+      }
+    };
+
+    // GOOGLE SIGN-IN
+    window.handleGoogleSignIn = async function() {
+      try {
+        const res = await signInWithPopup(auth, googleProvider);
+        const userRef = doc(db, "profiles", res.user.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            username: res.user.displayName || res.user.email.split('@')[0],
+            bio: '',
+            avatarUrl: res.user.photoURL || ''
+          });
+        }
+      } catch (err) {
+        alert('Google Sign-In Error: ' + err.message);
+      }
+    };
+
+    // LOGOUT
+    window.handleLogout = async function() {
+      await signOut(auth);
+    };
 
     window.showPage = function(pageId) {
       document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
@@ -199,14 +269,14 @@
 
     window.handleAvatarSelect = async function(event) {
       const file = event.target.files[0];
-      if (!file) return;
+      if (!file || !currentUser) return;
 
       alert('Uploading avatar...');
 
       try {
         const imageUrl = await uploadToCloudinary(file, 'image');
         document.querySelector('.profile-avatar').style.backgroundImage = `url(${imageUrl})`;
-        localStorage.setItem('savedAvatarUrl', imageUrl);
+        await setDoc(doc(db, "profiles", currentUser.uid), { avatarUrl: imageUrl }, { merge: true });
         alert('Avatar updated!');
       } catch (err) {
         alert('Error uploading avatar: ' + err.message);
@@ -214,72 +284,29 @@
     };
 
     window.saveProfile = async function() {
+      if (!currentUser) return;
       const usernameInput = document.getElementById('username').value.trim();
       const username = usernameInput || 'Anonymous';
       const bio = document.getElementById('bio').value;
-      const avatarUrl = localStorage.getItem('savedAvatarUrl') || '';
-      const uid = getUserId();
 
       try {
-        await setDoc(doc(db, "profiles", uid), {
+        await setDoc(doc(db, "profiles", currentUser.uid), {
           username: username,
-          bio: bio,
-          avatarUrl: avatarUrl
+          bio: bio
         }, { merge: true });
-        localStorage.setItem('currentUsername', username);
-        alert('Profile saved globally!');
+        alert('Profile updated!');
       } catch (err) {
         alert('Error saving profile: ' + err.message);
       }
     };
 
-    // RETROACTIVE FIX: Updates older posts missing creator info
-    window.claimAnonymousPosts = async function() {
-      const currentUsername = document.getElementById('username').value.trim();
-      if (!currentUsername || currentUsername === 'Anonymous') {
-        alert('Please enter and save a custom Username on your Profile first!');
-        return;
-      }
-
-      alert('Scanning for unassigned videos to claim...');
-
-      try {
-        const querySnapshot = await getDocs(collection(db, "posts"));
-        let updatedCount = 0;
-
-        for (const docSnap of querySnapshot.docs) {
-          const post = docSnap.data();
-          if (!post.creator || post.creator === 'Anonymous') {
-            await updateDoc(doc(db, "posts", docSnap.id), {
-              creator: currentUsername
-            });
-            updatedCount++;
-          }
-        }
-
-        alert(`Success! Updated ${updatedCount} video(s) to @${currentUsername}.`);
-        loadFeed();
-      } catch (err) {
-        alert('Error updating old videos: ' + err.message);
-      }
-    };
-
     window.uploadVideo = async function() {
+      if (!currentUser) return;
       const fileInput = document.getElementById('videoFileInput');
       const titleInput = document.getElementById('videoTitle');
-      
-      let creatorName = localStorage.getItem('currentUsername') || document.getElementById('username').value.trim();
-      
-      if (!creatorName || creatorName === 'Anonymous') {
-        const promptedName = prompt("Please enter your in-app Username for FreedomHub:", "Creator1");
-        if (promptedName && promptedName.trim()) {
-          creatorName = promptedName.trim();
-          document.getElementById('username').value = creatorName;
-          saveProfile();
-        } else {
-          creatorName = 'Anonymous';
-        }
-      }
+
+      const userSnap = await getDoc(doc(db, "profiles", currentUser.uid));
+      const creatorName = userSnap.exists() ? (userSnap.data().username || 'Anonymous') : 'Anonymous';
 
       if (!fileInput.files[0]) {
         alert('Please select or record a video file.');
@@ -295,6 +322,7 @@
         await addDoc(collection(db, "posts"), {
           title: titleInput.value.trim() || 'Untitled Video',
           creator: creatorName,
+          creatorUid: currentUser.uid,
           videoUrl: videoUrl,
           likes: 0,
           comments: [],
@@ -341,14 +369,7 @@
       }
     };
 
-    window.openChannel = function(creatorName) {
-      const currentLocalUser = localStorage.getItem('currentUsername') || 'Anonymous';
-      
-      if (creatorName.toLowerCase() === currentLocalUser.toLowerCase() && creatorName !== 'Anonymous') {
-        showPage('profile');
-        return;
-      }
-
+    window.openChannel = async function(creatorName) {
       document.getElementById('channelName').innerText = `@${creatorName}`;
       
       const channelVideos = allPostsData.filter(p => {
@@ -361,15 +382,12 @@
       if (channelVideos.length === 0) {
         container.innerHTML = '<p style="font-size:13px; color:#aaa;">No public videos found for this creator.</p>';
       } else {
-        container.innerHTML = channelVideos.map(v => {
-          const vTitle = v.data.title || 'Untitled Video';
-          return `
-            <div style="margin-top:10px; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px;">
-              <p style="font-size:13px; margin:0 0 5px 0;"><strong>${vTitle}</strong></p>
-              <video src="${v.data.videoUrl}" controls style="width:100%; border-radius:4px;"></video>
-            </div>
-          `;
-        }).join('');
+        container.innerHTML = channelVideos.map(v => `
+          <div style="margin-top:10px; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px;">
+            <p style="font-size:13px; margin:0 0 5px 0;"><strong>${v.data.title || 'Untitled Video'}</strong></p>
+            <video src="${v.data.videoUrl}" controls style="width:100%; border-radius:4px;"></video>
+          </div>
+        `).join('');
       }
 
       showPage('channelOverlay');
@@ -448,66 +466,57 @@
     }
 
     async function loadProfileData() {
-      const uid = getUserId();
+      if (!currentUser) return;
       try {
-        const docSnap = await getDoc(doc(db, "profiles", uid));
+        const docSnap = await getDoc(doc(db, "profiles", currentUser.uid));
         if (docSnap.exists()) {
           const data = docSnap.data();
-          const username = data.username || '';
-          document.getElementById('username').value = username;
+          document.getElementById('username').value = data.username || '';
           document.getElementById('bio').value = data.bio || '';
-          document.getElementById('stat-followers').innerText = data.followersCount || 0;
-          document.getElementById('stat-following').innerText = data.followingCount || 0;
-          if (username) localStorage.setItem('currentUsername', username);
-
           if (data.avatarUrl) {
             document.querySelector('.profile-avatar').style.backgroundImage = `url(${data.avatarUrl})`;
-            localStorage.setItem('savedAvatarUrl', data.avatarUrl);
           }
         }
 
         const postsSnapshot = await getDocs(collection(db, "posts"));
         let totalLikes = 0;
-        let totalVideos = postsSnapshot.size;
-        let topPost = null;
-        let maxLikes = -1;
+        let myVideosCount = 0;
 
         postsSnapshot.forEach((docSnap) => {
           const postData = docSnap.data();
-          const likesCount = postData.likes || 0;
-          totalLikes += likesCount;
-
-          if (likesCount > maxLikes) {
-            maxLikes = likesCount;
-            topPost = postData;
+          if (postData.creatorUid === currentUser.uid) {
+            myVideosCount++;
+            totalLikes += (postData.likes || 0);
           }
         });
 
         document.getElementById('stat-likes').innerText = totalLikes;
-        document.getElementById('stat-videos').innerText = totalVideos;
-
-        if (topPost) {
-          document.getElementById('topVideoSection').classList.remove('hidden');
-          document.getElementById('topVideoTitle').innerText = `${topPost.title || 'Untitled Video'} (${maxLikes} Likes)`;
-          document.getElementById('topVideoPlayer').src = topPost.videoUrl;
-        }
+        document.getElementById('stat-videos').innerText = myVideosCount;
       } catch (err) {
-        console.log("Error evaluating profile data: ", err);
+        console.log("Error loading profile:", err);
       }
     }
-
-    document.addEventListener('DOMContentLoaded', function() {
-      loadFeed();
-      loadProfileData();
-    });
   </script>
 </head>
 <body>
 
   <header>FreedomHub</header>
 
+  <!-- AUTHENTICATION SCREEN -->
+  <div id="authScreen" class="page">
+    <div class="card">
+      <h2 style="margin-top:0;">Welcome to FreedomHub</h2>
+      <p style="font-size: 13px; color: #a78bfa;">Sign in or create an account to start sharing videos.</p>
+      <input type="email" id="authEmail" placeholder="Email Address">
+      <input type="password" id="authPassword" placeholder="Password">
+      <button onclick="handleEmailAuth('login')">Sign In</button>
+      <button onclick="handleEmailAuth('register')" class="btn-secondary">Register New Account</button>
+      <button onclick="handleGoogleSignIn()" class="btn-google">Sign In with Google</button>
+    </div>
+  </div>
+
   <!-- HOME FEED PAGE -->
-  <div id="home" class="page">
+  <div id="home" class="page hidden">
     <h2>Galaxy Feed</h2>
     <input type="text" id="searchInput" placeholder="🔍 Search songs or creators..." onkeyup="filterFeed()">
     <div id="feed" style="margin-top: 15px;">
@@ -539,27 +548,13 @@
         <div class="stat-num" id="stat-likes">0</div>
         <div class="stat-label">Likes</div>
       </div>
-      <div class="stat-box">
-        <div class="stat-num" id="stat-followers">0</div>
-        <div class="stat-label">Followers</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="stat-following">0</div>
-        <div class="stat-label">Following</div>
-      </div>
-    </div>
-
-    <div id="topVideoSection" class="card hidden">
-      <h3 style="margin-top:0; color:#38bdf8;">🔥 Top Video</h3>
-      <p id="topVideoTitle" style="font-size:14px; margin-bottom:8px;"></p>
-      <video id="topVideoPlayer" controls style="width:100%; border-radius: 6px;"></video>
     </div>
 
     <div class="card">
       <input type="text" id="username" placeholder="In-App Username">
       <textarea id="bio" placeholder="Tell people about yourself"></textarea>
       <button onclick="saveProfile()">Save Profile</button>
-      <button onclick="claimAnonymousPosts()" style="background: linear-gradient(135deg, #059669, #0284c7); margin-top: 8px;">Claim Anonymous Videos</button>
+      <button onclick="handleLogout()" class="btn-secondary" style="margin-top: 8px;">Log Out</button>
     </div>
   </div>
 
@@ -568,7 +563,6 @@
     <button class="action-btn" onclick="showPage('home')" style="margin-bottom:15px;">← Back to Feed</button>
     <div class="card">
       <h2 id="channelName" style="margin-top:0; color:#38bdf8;">@Creator</h2>
-      <button class="action-btn">Follow</button>
     </div>
     <div class="card">
       <h3>Uploaded Videos</h3>
@@ -577,7 +571,7 @@
   </div>
 
   <!-- NAVIGATION -->
-  <nav>
+  <nav id="mainNavigation" class="hidden">
     <button onclick="showPage('home')">Home</button>
     <button onclick="showPage('upload')">Upload</button>
     <button onclick="showPage('profile')">Profile</button>
