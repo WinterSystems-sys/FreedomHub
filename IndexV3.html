@@ -170,7 +170,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, increment, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
     const CLOUD_NAME = "Ee4kulds";
@@ -193,6 +193,7 @@
     let currentUser = null;
     let cachedPosts = [];
     let currentActivePost = null;
+    let myFollowingList = [];
 
     window.showPage = function(pageId) {
       document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
@@ -208,6 +209,7 @@
         document.getElementById('authScreen').classList.add('hidden');
         document.getElementById('mainNavigation').classList.remove('hidden');
         showPage('home');
+        await loadMyFollowing();
         await loadFeed();
         await loadProfileData();
       } else {
@@ -218,6 +220,16 @@
       }
     });
 
+    async function loadMyFollowing() {
+      if (!currentUser) return;
+      try {
+        const docSnap = await getDoc(doc(db, "profiles", currentUser.uid));
+        if (docSnap.exists()) {
+          myFollowingList = docSnap.data().following || [];
+        }
+      } catch (err) {}
+    }
+
     window.handleEmailAuth = async function(type) {
       const email = document.getElementById('authEmail').value.trim();
       const password = document.getElementById('authPassword').value.trim();
@@ -225,7 +237,7 @@
       try {
         if (type === 'register') {
           const res = await createUserWithEmailAndPassword(auth, email, password);
-          await setDoc(doc(db, "profiles", res.user.uid), { username: email.split('@')[0], bio: '', avatarUrl: '' });
+          await setDoc(doc(db, "profiles", res.user.uid), { username: email.split('@')[0], bio: '', avatarUrl: '', following: [] });
         } else {
           await signInWithEmailAndPassword(auth, email, password);
         }
@@ -238,7 +250,7 @@
         const userRef = doc(db, "profiles", res.user.uid);
         const userSnap = await getDoc(userRef);
         if (!userSnap.exists()) {
-          await setDoc(userRef, { username: res.user.displayName || 'User', bio: '', avatarUrl: res.user.photoURL || '' });
+          await setDoc(userRef, { username: res.user.displayName || 'User', bio: '', avatarUrl: res.user.photoURL || '', following: [] });
         }
       } catch (err) { alert(err.message); }
     };
@@ -346,6 +358,9 @@
       document.getElementById('watchCreator').innerText = `@${post.creator || 'Anonymous'}`;
       document.getElementById('watchDesc').innerText = post.description || '';
       document.getElementById('watchVideoPlayer').src = post.videoUrl;
+      document.getElementById('watchLikeCount').innerText = post.likes || 0;
+
+      updateFollowBtnUI(post.creatorUid);
 
       renderComments(post.comments || []);
       renderWatchSidebar(post.id);
@@ -353,6 +368,47 @@
       showPage('watchOverlay');
 
       try { await updateDoc(doc(db, "posts", postId), { views: increment(1) }); } catch (err) {}
+    };
+
+    window.likeCurrentVideo = async function() {
+      if (!currentActivePost) return;
+      try {
+        await updateDoc(doc(db, "posts", currentActivePost.id), { likes: increment(1) });
+        currentActivePost.likes = (currentActivePost.likes || 0) + 1;
+        document.getElementById('watchLikeCount').innerText = currentActivePost.likes;
+        await loadFeed();
+      } catch (err) { alert(err.message); }
+    };
+
+    function updateFollowBtnUI(creatorUid) {
+      const btn = document.getElementById('followCreatorBtn');
+      if (!btn) return;
+      if (!creatorUid || (currentUser && creatorUid === currentUser.uid)) {
+        btn.style.display = 'none';
+        return;
+      }
+      btn.style.display = 'inline-block';
+      const isFollowing = myFollowingList.includes(creatorUid);
+      btn.innerText = isFollowing ? 'Following' : '+ Follow';
+      btn.style.background = isFollowing ? '#334155' : 'linear-gradient(135deg, #7e22ce, #3b82f6)';
+    }
+
+    window.toggleFollowCreator = async function() {
+      if (!currentUser || !currentActivePost || !currentActivePost.creatorUid) return;
+      const creatorUid = currentActivePost.creatorUid;
+      const userRef = doc(db, "profiles", currentUser.uid);
+      const isFollowing = myFollowingList.includes(creatorUid);
+
+      try {
+        if (isFollowing) {
+          await updateDoc(userRef, { following: arrayRemove(creatorUid) });
+          myFollowingList = myFollowingList.filter(id => id !== creatorUid);
+        } else {
+          await updateDoc(userRef, { following: arrayUnion(creatorUid) });
+          myFollowingList.push(creatorUid);
+        }
+        updateFollowBtnUI(creatorUid);
+      } catch (err) { alert(err.message); }
     };
 
     function renderComments(comments) {
@@ -416,7 +472,11 @@
           <h3 style="margin:0 0 4px 0;">${data.title || 'Untitled'}</h3>
           <span class="creator-link" onclick="openChannel('${data.creator}')">By @${data.creator || 'Anonymous'}</span>
           ${mediaHtml}
-          <p style="font-size:13px; color:#a78bfa; margin-top:8px;">${data.description || ''}</p>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; font-size:12px; color:#a78bfa;">
+            <span>❤️ ${data.likes || 0} Likes</span>
+            <span>💬 ${(data.comments || []).length} Comments</span>
+          </div>
+          <p style="font-size:13px; color:#ddd; margin-top:6px;">${data.description || ''}</p>
         `;
         container.appendChild(post);
       });
@@ -514,8 +574,14 @@
     <div class="card" style="padding:10px;">
       <video id="watchVideoPlayer" controls autoplay style="width:100%; border-radius:8px;"></video>
       <h2 id="watchTitle" style="margin:10px 0 4px 0;">Video Title</h2>
-      <span id="watchCreator" class="creator-link">@Creator</span>
-      <p id="watchDesc" style="font-size:13px; color:#ccc; margin-top:8px;"></p>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+        <span id="watchCreator" class="creator-link">@Creator</span>
+        <button id="followCreatorBtn" onclick="toggleFollowCreator()" style="width:auto; padding:6px 14px; margin:0; font-size:12px;">+ Follow</button>
+      </div>
+      <button onclick="likeCurrentVideo()" class="btn-secondary" style="margin-top:12px; width:auto; padding:8px 16px;">
+        ❤️ Like (<span id="watchLikeCount">0</span>)
+      </button>
+      <p id="watchDesc" style="font-size:13px; color:#ccc; margin-top:12px;"></p>
     </div>
 
     <!-- Comments Section -->
@@ -579,5 +645,4 @@
   <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
 
 </body>
-      </html>
-      
+</html>
