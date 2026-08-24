@@ -194,14 +194,22 @@
     let cachedPosts = [];
     let currentActivePost = null;
 
+    window.showPage = function(pageId) {
+      document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
+      const target = document.getElementById(pageId);
+      if (target) target.classList.remove('hidden');
+      if (pageId === 'shorts') renderShorts();
+      if (pageId === 'profile') loadProfileData();
+    };
+
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         currentUser = user;
         document.getElementById('authScreen').classList.add('hidden');
         document.getElementById('mainNavigation').classList.remove('hidden');
         showPage('home');
-        await loadProfileData();
         await loadFeed();
+        await loadProfileData();
       } else {
         currentUser = null;
         document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
@@ -236,13 +244,6 @@
     };
 
     window.handleLogout = async function() { await signOut(auth); };
-
-    window.showPage = function(pageId) {
-      document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
-      document.getElementById(pageId).classList.remove('hidden');
-      if (pageId === 'shorts') renderShorts();
-      if (pageId === 'profile') loadProfileData();
-    };
 
     window.pickAvatar = function() { document.getElementById('avatarUpload').click(); };
 
@@ -288,7 +289,7 @@
         let count = 0;
         for (const docSnap of querySnapshot.docs) {
           const data = docSnap.data();
-          if ((data.creator || '').toLowerCase() === myUsername || data.creator === 'Thaddius') {
+          if ((data.creator || '').toLowerCase() === myUsername || (data.creator || '').toLowerCase() === 'thaddius') {
             await updateDoc(doc(db, "posts", docSnap.id), { creatorUid: currentUser.uid });
             count++;
           }
@@ -356,7 +357,7 @@
 
     function renderComments(comments) {
       const list = document.getElementById('commentsList');
-      if (!comments.length) {
+      if (!comments || !comments.length) {
         list.innerHTML = '<p style="font-size:12px; color:#aaa;">No comments yet. Be the first!</p>';
         return;
       }
@@ -390,14 +391,14 @@
     };
 
     function renderWatchSidebar(currentId) {
-      const container = document.getElementById('relatedVideosContainer');
       const otherPosts = cachedPosts.filter(p => p.id !== currentId);
       renderFeedItems(otherPosts, 'relatedVideosContainer');
     }
 
     function renderFeedItems(posts, targetContainerId) {
       const container = document.getElementById(targetContainerId);
-      if (!posts.length) {
+      if (!container) return;
+      if (!posts || !posts.length) {
         container.innerHTML = '<p style="font-size:13px; color:#aaa;">No videos found.</p>';
         return;
       }
@@ -434,6 +435,7 @@
 
     function renderShorts() {
       const container = document.getElementById('shortsContainer');
+      if (!container) return;
       if (!cachedPosts.length) {
         container.innerHTML = '<p style="text-align:center; padding-top:40px;">No videos available.</p>';
         return;
@@ -482,7 +484,7 @@
 
     window.openChannel = function(creatorName) {
       document.getElementById('channelName').innerText = `@${creatorName}`;
-      const channelPosts = cachedPosts.filter(p => (p.creator || '').toLowerCase() === creatorName.toLowerCase());
+      const channelPosts = cachedPosts.filter(p => (p.creator || '').toLowerCase() === (creatorName || '').toLowerCase());
       renderFeedItems(channelPosts, 'channelVideosContainer');
       showPage('channelOverlay');
     };
@@ -492,7 +494,7 @@
 
   <header>FreedomHub V4.5</header>
 
-  <div id="authScreen" class="page">
+  <div id="authScreen" class="page hidden">
     <div class="card">
       <h2>Sign In</h2>
       <input type="email" id="authEmail" placeholder="Email">
@@ -540,5 +542,4 @@
       <input type="file" id="videoFileInput" accept="video/*">
       <label style="font-size:12px; color:#a78bfa;">Thumbnail Image</label>
       <input type="file" id="thumbFileInput" accept="image/*">
-      <input type="text" id="videoTitle" placeholder="Title">
-      <textarea id="videoDesc" placeho
+      <input t
