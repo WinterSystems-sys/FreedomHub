@@ -542,4 +542,42 @@
       <input type="file" id="videoFileInput" accept="video/*">
       <label style="font-size:12px; color:#a78bfa;">Thumbnail Image</label>
       <input type="file" id="thumbFileInput" accept="image/*">
-      <input type="te
+      <input type="text" id="videoTitle" placeholder="Title">
+      <textarea id="videoDesc" placeholder="Description"></textarea>
+      <button onclick="uploadVideo()">Publish</button>
+    </div>
+  </div>
+
+  <div id="profile" class="page hidden">
+    <div id="userAvatar" class="profile-avatar" onclick="pickAvatar()"></div>
+    <div class="card">
+      <input type="text" id="username" placeholder="Username">
+      <textarea id="bio" placeholder="Bio"></textarea>
+      <button onclick="saveProfile()" style="margin-top:10px;">Save Profile</button>
+      <button onclick="handleLogout()" class="btn-secondary" style="background:#ef4444; margin-top:8px;">Log Out</button>
+    </div>
+    <h3 style="color:#a78bfa; margin-top:20px;">My Uploads</h3>
+    <button onclick="claimOldVideos()" class="btn-secondary" style="margin-bottom:12px; font-size:13px;">🔄 Claim Unassigned Videos</button>
+    <div id="myUploadsContainer"></div>
+  </div>
+
+  <div id="channelOverlay" class="page hidden">
+    <button class="btn-secondary" onclick="showPage('home')" style="width:auto; padding:6px 16px; margin-bottom:15px;">← Back</button>
+    <div class="card">
+      <h2 id="channelName" style="margin:0; color:#38bdf8;">@Creator</h2>
+    </div>
+    <div id="channelVideosContainer"></div>
+  </div>
+
+  <nav id="mainNavigation" class="hidden">
+    <button onclick="showPage('home')">Home</button>
+    <button onclick="showPage('shorts')">Shorts</button>
+    <button onclick="showPage('upload')">Upload</button>
+    <button onclick="showPage('profile')">Profile</button>
+  </nav>
+
+  <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
+
+</body>
+      </html>
+      
