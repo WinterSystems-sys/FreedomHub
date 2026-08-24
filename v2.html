@@ -207,7 +207,7 @@ Upload
 <div id="profile"
 class="page hidden">
 
-<div class="profile-avatar">
+<div class="profile-avatar" "onclick="pickAvatar()">
 </div>
 
 <br>
@@ -538,7 +538,45 @@ renderVideos();
 );
 
 </script>
+<!-- AVATAR UPLOAD SYSTEM -->
+<input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
 
+<script>
+  function pickAvatar() {
+    document.getElementById('avatarUpload').click();
+  }
+
+  function handleAvatarSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const imageDataUrl = e.target.result;
+      const avatar = document.querySelector('.profile-avatar');
+      if (avatar) {
+        avatar.style.backgroundImage = `url(${imageDataUrl})`;
+        avatar.style.backgroundSize = 'cover';
+        avatar.style.backgroundPosition = 'center';
+      }
+      localStorage.setItem('savedAvatar', imageDataUrl);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const savedAvatar = localStorage.getItem('savedAvatar');
+    if (savedAvatar) {
+      const avatar = document.querySelector('.profile-avatar');
+      if (avatar) {
+        avatar.style.backgroundImage = `url(${savedAvatar})`;
+        avatar.style.backgroundSize = 'cover';
+        avatar.style.backgroundPosition = 'center';
+      }
+    }
+  });
+</script>
+  
 </body>
 
 </html>
