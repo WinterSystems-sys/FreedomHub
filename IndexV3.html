@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FreedomHub V4.4</title>
+  <title>FreedomHub V4.5</title>
   <style>
     body {
       margin: 0;
@@ -33,7 +33,7 @@
       margin-bottom: 15px;
       border: 1px solid rgba(168, 85, 247, 0.3);
     }
-    input, textarea, button, select {
+    input, textarea, button {
       width: 100%;
       padding: 10px;
       margin-top: 10px;
@@ -145,6 +145,16 @@
       cursor: pointer;
     }
 
+    /* Comment Section Styling */
+    .comment-item {
+      background: rgba(15, 8, 25, 0.6);
+      border: 1px solid rgba(168, 85, 247, 0.2);
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+
     nav {
       position: fixed;
       bottom: 0; left: 0; right: 0;
@@ -160,7 +170,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, increment, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
     const CLOUD_NAME = "Ee4kulds";
@@ -182,6 +192,7 @@
 
     let currentUser = null;
     let cachedPosts = [];
+    let currentActivePost = null;
 
     onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -266,6 +277,28 @@
       } catch (err) { alert(err.message); }
     };
 
+    window.claimOldVideos = async function() {
+      if (!currentUser) return;
+      const userSnap = await getDoc(doc(db, "profiles", currentUser.uid));
+      const myUsername = userSnap.exists() ? (userSnap.data().username || '').toLowerCase() : '';
+      
+      alert('Claiming videos matching your profile username...');
+      try {
+        const querySnapshot = await getDocs(collection(db, "posts"));
+        let count = 0;
+        for (const docSnap of querySnapshot.docs) {
+          const data = docSnap.data();
+          if ((data.creator || '').toLowerCase() === myUsername || data.creator === 'Thaddius') {
+            await updateDoc(doc(db, "posts", docSnap.id), { creatorUid: currentUser.uid });
+            count++;
+          }
+        }
+        alert(`Claimed ${count} videos! Reloading feed...`);
+        await loadFeed();
+        await loadProfileData();
+      } catch (err) { alert(err.message); }
+    };
+
     window.uploadVideo = async function() {
       if (!currentUser) return;
       const fileInput = document.getElementById('videoFileInput');
@@ -292,6 +325,7 @@
           thumbnailUrl,
           likes: 0,
           views: 0,
+          comments: [],
           createdAt: new Date()
         });
 
@@ -302,36 +336,86 @@
       } catch (err) { alert(err.message); }
     };
 
-    window.playInlineVideo = async function(containerId, videoUrl, postId) {
-      document.getElementById(containerId).innerHTML = `<video src="${videoUrl}" controls autoplay style="width:100%; border-radius: 8px;"></video>`;
+    window.openWatchModal = async function(postId) {
+      const post = cachedPosts.find(p => p.id === postId);
+      if (!post) return;
+      currentActivePost = post;
+
+      document.getElementById('watchTitle').innerText = post.title || 'Untitled';
+      document.getElementById('watchCreator').innerText = `@${post.creator || 'Anonymous'}`;
+      document.getElementById('watchDesc').innerText = post.description || '';
+      document.getElementById('watchVideoPlayer').src = post.videoUrl;
+
+      renderComments(post.comments || []);
+      renderWatchSidebar(post.id);
+
+      showPage('watchOverlay');
+
       try { await updateDoc(doc(db, "posts", postId), { views: increment(1) }); } catch (err) {}
     };
+
+    function renderComments(comments) {
+      const list = document.getElementById('commentsList');
+      if (!comments.length) {
+        list.innerHTML = '<p style="font-size:12px; color:#aaa;">No comments yet. Be the first!</p>';
+        return;
+      }
+      list.innerHTML = comments.map(c => `
+        <div class="comment-item">
+          <strong style="color:#a78bfa;">@${c.user}</strong>
+          <p style="margin:3px 0 0 0;">${c.text}</p>
+        </div>
+      `).join('');
+    }
+
+    window.postComment = async function() {
+      if (!currentUser || !currentActivePost) return;
+      const input = document.getElementById('newCommentInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const userSnap = await getDoc(doc(db, "profiles", currentUser.uid));
+      const userName = userSnap.exists() ? (userSnap.data().username || 'User') : 'User';
+      const commentObj = { user: userName, text, createdAt: new Date().toISOString() };
+
+      try {
+        await updateDoc(doc(db, "posts", currentActivePost.id), {
+          comments: arrayUnion(commentObj)
+        });
+        if (!currentActivePost.comments) currentActivePost.comments = [];
+        currentActivePost.comments.push(commentObj);
+        renderComments(currentActivePost.comments);
+        input.value = '';
+      } catch (err) { alert(err.message); }
+    };
+
+    function renderWatchSidebar(currentId) {
+      const container = document.getElementById('relatedVideosContainer');
+      const otherPosts = cachedPosts.filter(p => p.id !== currentId);
+      renderFeedItems(otherPosts, 'relatedVideosContainer');
+    }
 
     function renderFeedItems(posts, targetContainerId) {
       const container = document.getElementById(targetContainerId);
       if (!posts.length) {
-        container.innerHTML = '<p>No videos found.</p>';
+        container.innerHTML = '<p style="font-size:13px; color:#aaa;">No videos found.</p>';
         return;
       }
       container.innerHTML = '';
       posts.forEach((data) => {
-        const mediaContainerId = `media-${data.id}`;
-        let mediaHtml = data.thumbnailUrl ? `
-          <div id="${mediaContainerId}" class="thumbnail-container" onclick="playInlineVideo('${mediaContainerId}', '${data.videoUrl}', '${data.id}')">
-            <img src="${data.thumbnailUrl}" class="thumbnail-img">
+        let mediaHtml = `
+          <div class="thumbnail-container" onclick="openWatchModal('${data.id}')">
+            ${data.thumbnailUrl ? `<img src="${data.thumbnailUrl}" class="thumbnail-img">` : `<video src="${data.videoUrl}" style="width:100%; height:100%; object-fit:cover;"></video>`}
             <div class="play-overlay">▶</div>
-          </div>` : `
-          <div id="${mediaContainerId}">
-            <video src="${data.videoUrl}" controls style="width:100%; border-radius: 8px; margin-top:8px;"></video>
           </div>`;
 
         const post = document.createElement('div');
         post.className = 'card';
         post.innerHTML = `
-          <h3>${data.title || 'Untitled'}</h3>
+          <h3 style="margin:0 0 4px 0;">${data.title || 'Untitled'}</h3>
           <span class="creator-link" onclick="openChannel('${data.creator}')">By @${data.creator || 'Anonymous'}</span>
           ${mediaHtml}
-          <p style="font-size:13px; color:#a78bfa;">${data.description || ''}</p>
+          <p style="font-size:13px; color:#a78bfa; margin-top:8px;">${data.description || ''}</p>
         `;
         container.appendChild(post);
       });
@@ -406,7 +490,7 @@
 </head>
 <body>
 
-  <header>FreedomHub V4.4</header>
+  <header>FreedomHub V4.5</header>
 
   <div id="authScreen" class="page">
     <div class="card">
@@ -423,6 +507,28 @@
     <div id="feed"></div>
   </div>
 
+  <div id="watchOverlay" class="page hidden">
+    <button class="btn-secondary" onclick="showPage('home')" style="width:auto; padding:6px 16px; margin-bottom:15px;">← Back to Home</button>
+    <div class="card" style="padding:10px;">
+      <video id="watchVideoPlayer" controls autoplay style="width:100%; border-radius:8px;"></video>
+      <h2 id="watchTitle" style="margin:10px 0 4px 0;">Video Title</h2>
+      <span id="watchCreator" class="creator-link">@Creator</span>
+      <p id="watchDesc" style="font-size:13px; color:#ccc; margin-top:8px;"></p>
+    </div>
+
+    <!-- Comments Section -->
+    <div class="card">
+      <h3 style="margin:0 0 10px 0; color:#a78bfa;">Comments</h3>
+      <input type="text" id="newCommentInput" placeholder="Add a comment...">
+      <button onclick="postComment()" style="margin-top:8px;">Post Comment</button>
+      <div id="commentsList" style="margin-top:15px;"></div>
+    </div>
+
+    <!-- Suggested Videos -->
+    <h3 style="color:#a78bfa; margin-top:20px;">Up Next</h3>
+    <div id="relatedVideosContainer"></div>
+  </div>
+
   <div id="shorts" class="page shorts-page hidden">
     <div id="shortsContainer"></div>
   </div>
@@ -430,44 +536,9 @@
   <div id="upload" class="page hidden">
     <div class="card">
       <h2>Upload Video</h2>
-      <label style="font-size:12px; color:#a78bfa;">Video File (Choose existing or record live)</label>
-      <input type="file" id="videoFileInput" accept="video/*" capture="environment">
+      <label style="font-size:12px; color:#a78bfa;">Video File</label>
+      <input type="file" id="videoFileInput" accept="video/*">
       <label style="font-size:12px; color:#a78bfa;">Thumbnail Image</label>
       <input type="file" id="thumbFileInput" accept="image/*">
       <input type="text" id="videoTitle" placeholder="Title">
-      <textarea id="videoDesc" placeholder="Description"></textarea>
-      <button onclick="uploadVideo()">Publish</button>
-    </div>
-  </div>
-
-  <div id="profile" class="page hidden">
-    <div id="userAvatar" class="profile-avatar" onclick="pickAvatar()"></div>
-    <div class="card">
-      <input type="text" id="username" placeholder="Username">
-      <textarea id="bio" placeholder="Bio"></textarea>
-      <button onclick="saveProfile()" style="margin-top:10px;">Save Profile</button>
-      <button onclick="handleLogout()" class="btn-secondary" style="background:#ef4444; margin-top:8px;">Log Out</button>
-    </div>
-    <h3 style="color:#a78bfa; margin-top:20px;">My Uploads</h3>
-    <div id="myUploadsContainer"></div>
-  </div>
-
-  <div id="channelOverlay" class="page hidden">
-    <button class="btn-secondary" onclick="showPage('home')" style="width:auto; padding:6px 16px; margin-bottom:15px;">← Back</button>
-    <div class="card">
-      <h2 id="channelName" style="margin:0; color:#38bdf8;">@Creator</h2>
-    </div>
-    <div id="channelVideosContainer"></div>
-  </div>
-
-  <nav id="mainNavigation" class="hidden">
-    <button onclick="showPage('home')">Home</button>
-    <button onclick="showPage('shorts')">Shorts</button>
-    <button onclick="showPage('upload')">Upload</button>
-    <button onclick="showPage('profile')">Profile</button>
-  </nav>
-
-  <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
-
-</body>
-</html>
+      <textarea id="videoDesc" placeho
