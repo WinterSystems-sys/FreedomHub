@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreedomHub</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      padding-bottom: 60px;
+    }
+    header {
+      background-color: #1f1f1f;
+      padding: 15px;
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+      border-bottom: 1px solid #333;
+    }
+    .page {
+      padding: 20px;
+    }
+    .hidden {
+      display: none !important;
+    }
+    .center {
+      text-align: center;
+    }
+    .card {
+      background: #1f1f1f;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 15px;
+    }
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      border-radius: 5px;
+      border: 1px solid #333;
+      box-sizing: border-box;
+      background-color: #2b2b2b;
+      color: #fff;
+    }
+    button {
+      background-color: #007bff;
+      cursor: pointer;
+      font-weight: bold;
+      border: none;
+    }
+    
+    /* PROFILE AVATAR STYLING */
+    .profile-avatar {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background-color: #007bff;
+      background-size: cover;
+      background-position: center;
+      margin: 0 auto 15px auto;
+      cursor: pointer;
+      border: 3px solid #ffffff;
+    }
+
+    /* BOTTOM NAV */
+    nav {
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      background: #1f1f1f;
+      display: flex;
+      justify-content: space-around;
+      padding: 10px 0;
+      border-top: 1px solid #333;
+    }
+    nav button {
+      width: auto;
+      margin: 0;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+
+  <header>FreedomHub</header>
+
+  <!-- HOME PAGE -->
+  <div id="home" class="page">
+    <h2>Home Feed</h2>
+    <div id="feed">
+      <p>No videos uploaded yet. Go to Upload to add one!</p>
+    </div>
+  </div>
+
+  <!-- UPLOAD PAGE -->
+  <div id="upload" class="page hidden">
+    <div class="card">
+      <h2>Upload Video</h2>
+      <input type="file" id="videoInput" accept="video/*">
+      <input type="text" id="videoTitle" placeholder="Video Title">
+      <button onclick="uploadVideo()">Post Video</button>
+    </div>
+  </div>
+
+  <!-- PROFILE PAGE -->
+  <div id="profile" class="page hidden">
+    <div class="profile-avatar" onclick="pickAvatar()"></div>
+    
+    <div class="center">
+      <input type="text" id="username" placeholder="Username">
+      <textarea id="bio" placeholder="Tell people about yourself"></textarea>
+      <button onclick="saveProfile()">Save Profile</button>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+      <h3>Stats</h3>
+      <p>Posts: <span id="postsCount">0</span></p>
+    </div>
+  </div>
+
+  <!-- NAVIGATION -->
+  <nav>
+    <button onclick="showPage('home')">Home</button>
+    <button onclick="showPage('upload')">Upload</button>
+    <button onclick="showPage('profile')">Profile</button>
+  </nav>
+
+  <!-- HIDDEN FILE INPUT FOR AVATAR -->
+  <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
+
+  <script>
+    // NAVIGATION
+    function showPage(pageId) {
+      document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
+      document.getElementById(pageId).classList.remove('hidden');
+    }
+
+    // AVATAR UPLOAD LOGIC
+    function pickAvatar() {
+      document.getElementById('avatarUpload').click();
+    }
+
+    function handleAvatarSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const imageDataUrl = e.target.result;
+        const avatar = document.querySelector('.profile-avatar');
+        if (avatar) {
+          avatar.style.backgroundImage = `url(${imageDataUrl})`;
+        }
+        localStorage.setItem('savedAvatar', imageDataUrl);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // PROFILE SAVE LOGIC
+    function saveProfile() {
+      const username = document.getElementById('username').value;
+      const bio = document.getElementById('bio').value;
+
+      localStorage.setItem('savedUsername', username);
+      localStorage.setItem('savedBio', bio);
+
+      alert('Profile saved!');
+    }
+
+    // LOAD SAVED DATA ON PAGE LOAD
+    document.addEventListener('DOMContentLoaded', function() {
+      const savedAvatar = localStorage.getItem('savedAvatar');
+      if (savedAvatar) {
+        const avatar = document.querySelector('.profile-avatar');
+        if (avatar) avatar.style.backgroundImage = `url(${savedAvatar})`;
+      }
+
+      const savedUsername = localStorage.getItem('savedUsername');
+      if (savedUsername) {
+        document.getElementById('username').value = savedUsername;
+      }
+
+      const savedBio = localStorage.getItem('savedBio');
+      if (savedBio) {
+        document.getElementById('bio').value = savedBio;
+      }
+    });
+
+    // VIDEO UPLOAD LOGIC
+    function uploadVideo() {
+      const fileInput = document.getElementById('videoInput');
+      const titleInput = document.getElementById('videoTitle');
+      const feed = document.getElementById('feed');
+
+      if (!fileInput.files[0]) {
+        alert('Please select a video file.');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const videoUrl = URL.createObjectURL(file);
+
+      const post = document.createElement('div');
+      post.className = 'card';
+      post.innerHTML = `
+        <h3>${titleInput.value || 'Untitled Video'}</h3>
+        <video src="${videoUrl}" controls style="width:100%; border-radius: 5px;"></video>
+      `;
+
+      if (feed.children[0] && feed.children[0].tagName === 'P') {
+        feed.innerHTML = '';
+      }
+
+      feed.prepend(post);
+      fileInput.value = '';
+      titleInput.value = '';
+      showPage('home');
+    }
+  </script>
+</body>
+</html>
