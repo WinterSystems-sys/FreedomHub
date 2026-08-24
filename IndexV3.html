@@ -51,8 +51,6 @@
       font-weight: bold;
       border: none;
     }
-    
-    /* PROFILE AVATAR STYLING */
     .profile-avatar {
       width: 120px;
       height: 120px;
@@ -61,11 +59,8 @@
       background-size: cover;
       background-position: center;
       margin: 0 auto 15px auto;
-      cursor: pointer;
       border: 3px solid #ffffff;
     }
-
-    /* BOTTOM NAV */
     nav {
       position: fixed;
       bottom: 0;
@@ -82,6 +77,131 @@
       background: transparent;
     }
   </style>
+
+  <!-- FIREBASE SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // YOUR FIREBASE CONFIGURATION
+    const firebaseConfig = {
+      apiKey: "AIzaSyAmfO22_KVc-Hi5thsEyu7BBXBaMAa4luM",
+      authDomain: "freedomhub-a710b.firebaseapp.com",
+      projectId: "freedomhub-a710b",
+      storageBucket: "freedomhub-a710b.firebasestorage.app",
+      messagingSenderId: "349898855135",
+      appId: "1:349898855135:web:efdc83fb3a8fd8a0f50f6a"
+    };
+
+    // INITIALIZE FIREBASE
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // GLOBAL UTILITIES
+    window.showPage = function(pageId) {
+      document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
+      document.getElementById(pageId).classList.remove('hidden');
+    };
+
+    // CLOUD PROFILE SAVE
+    window.saveProfile = async function() {
+      const username = document.getElementById('username').value;
+      const bio = document.getElementById('bio').value;
+      const avatarUrl = document.getElementById('avatarUrl').value;
+
+      try {
+        await setDoc(doc(db, "profiles", "myUser"), {
+          username: username,
+          bio: bio,
+          avatarUrl: avatarUrl
+        });
+        if (avatarUrl) {
+          document.querySelector('.profile-avatar').style.backgroundImage = `url(${avatarUrl})`;
+        }
+        alert('Profile saved to Google Cloud!');
+      } catch (err) {
+        console.error(err);
+        alert('Error saving profile: ' + err.message);
+      }
+    };
+
+    // CLOUD VIDEO POST (VIA URL)
+    window.uploadVideo = async function() {
+      const videoUrl = document.getElementById('videoUrlInput').value;
+      const titleInput = document.getElementById('videoTitle').value;
+
+      if (!videoUrl) {
+        alert('Please paste a video URL.');
+        return;
+      }
+
+      try {
+        await addDoc(collection(db, "posts"), {
+          title: titleInput || 'Untitled Video',
+          videoUrl: videoUrl,
+          createdAt: new Date()
+        });
+
+        alert('Video link published live!');
+        document.getElementById('videoUrlInput').value = '';
+        document.getElementById('videoTitle').value = '';
+        loadFeed();
+        showPage('home');
+      } catch (err) {
+        console.error(err);
+        alert('Error publishing video: ' + err.message);
+      }
+    };
+
+    // FETCH LIVE FEED
+    async function loadFeed() {
+      const feed = document.getElementById('feed');
+      feed.innerHTML = '<p>Loading feed from server...</p>';
+
+      try {
+        const querySnapshot = await getDocs(collection(db, "posts"));
+        if (querySnapshot.empty) {
+          feed.innerHTML = '<p>No live videos yet. Share a video link!</p>';
+          return;
+        }
+
+        feed.innerHTML = '';
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const post = document.createElement('div');
+          post.className = 'card';
+          post.innerHTML = `
+            <h3>${data.title}</h3>
+            <video src="${data.videoUrl}" controls style="width:100%; border-radius: 5px;"></video>
+          `;
+          feed.appendChild(post);
+        });
+      } catch (err) {
+        console.error(err);
+        feed.innerHTML = '<p>Error loading posts.</p>';
+      }
+    }
+
+    // INITIAL LOAD
+    document.addEventListener('DOMContentLoaded', async function() {
+      loadFeed();
+
+      try {
+        const docSnap = await getDoc(doc(db, "profiles", "myUser"));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          document.getElementById('username').value = data.username || '';
+          document.getElementById('bio').value = data.bio || '';
+          document.getElementById('avatarUrl').value = data.avatarUrl || '';
+          if (data.avatarUrl) {
+            document.querySelector('.profile-avatar').style.backgroundImage = `url(${data.avatarUrl})`;
+          }
+        }
+      } catch (err) {
+        console.log("No profile found yet.");
+      }
+    });
+  </script>
 </head>
 <body>
 
@@ -91,15 +211,15 @@
   <div id="home" class="page">
     <h2>Home Feed</h2>
     <div id="feed">
-      <p>No videos uploaded yet. Go to Upload to add one!</p>
+      <p>Loading...</p>
     </div>
   </div>
 
   <!-- UPLOAD PAGE -->
   <div id="upload" class="page hidden">
     <div class="card">
-      <h2>Upload Video</h2>
-      <input type="file" id="videoInput" accept="video/*">
+      <h2>Share Video Link</h2>
+      <input type="url" id="videoUrlInput" placeholder="Paste Direct Video URL (.mp4)">
       <input type="text" id="videoTitle" placeholder="Video Title">
       <button onclick="uploadVideo()">Post Video</button>
     </div>
@@ -107,17 +227,13 @@
 
   <!-- PROFILE PAGE -->
   <div id="profile" class="page hidden">
-    <div class="profile-avatar" onclick="pickAvatar()"></div>
+    <div class="profile-avatar"></div>
     
     <div class="center">
       <input type="text" id="username" placeholder="Username">
+      <input type="url" id="avatarUrl" placeholder="Profile Image URL">
       <textarea id="bio" placeholder="Tell people about yourself"></textarea>
       <button onclick="saveProfile()">Save Profile</button>
-    </div>
-
-    <div class="card" style="margin-top: 20px;">
-      <h3>Stats</h3>
-      <p>Posts: <span id="postsCount">0</span></p>
     </div>
   </div>
 
@@ -128,97 +244,5 @@
     <button onclick="showPage('profile')">Profile</button>
   </nav>
 
-  <!-- HIDDEN FILE INPUT FOR AVATAR -->
-  <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
-
-  <script>
-    // NAVIGATION
-    function showPage(pageId) {
-      document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
-      document.getElementById(pageId).classList.remove('hidden');
-    }
-
-    // AVATAR UPLOAD LOGIC
-    function pickAvatar() {
-      document.getElementById('avatarUpload').click();
-    }
-
-    function handleAvatarSelect(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        const imageDataUrl = e.target.result;
-        const avatar = document.querySelector('.profile-avatar');
-        if (avatar) {
-          avatar.style.backgroundImage = `url(${imageDataUrl})`;
-        }
-        localStorage.setItem('savedAvatar', imageDataUrl);
-      };
-      reader.readAsDataURL(file);
-    }
-
-    // PROFILE SAVE LOGIC
-    function saveProfile() {
-      const username = document.getElementById('username').value;
-      const bio = document.getElementById('bio').value;
-
-      localStorage.setItem('savedUsername', username);
-      localStorage.setItem('savedBio', bio);
-
-      alert('Profile saved!');
-    }
-
-    // LOAD SAVED DATA ON PAGE LOAD
-    document.addEventListener('DOMContentLoaded', function() {
-      const savedAvatar = localStorage.getItem('savedAvatar');
-      if (savedAvatar) {
-        const avatar = document.querySelector('.profile-avatar');
-        if (avatar) avatar.style.backgroundImage = `url(${savedAvatar})`;
-      }
-
-      const savedUsername = localStorage.getItem('savedUsername');
-      if (savedUsername) {
-        document.getElementById('username').value = savedUsername;
-      }
-
-      const savedBio = localStorage.getItem('savedBio');
-      if (savedBio) {
-        document.getElementById('bio').value = savedBio;
-      }
-    });
-
-    // VIDEO UPLOAD LOGIC
-    function uploadVideo() {
-      const fileInput = document.getElementById('videoInput');
-      const titleInput = document.getElementById('videoTitle');
-      const feed = document.getElementById('feed');
-
-      if (!fileInput.files[0]) {
-        alert('Please select a video file.');
-        return;
-      }
-
-      const file = fileInput.files[0];
-      const videoUrl = URL.createObjectURL(file);
-
-      const post = document.createElement('div');
-      post.className = 'card';
-      post.innerHTML = `
-        <h3>${titleInput.value || 'Untitled Video'}</h3>
-        <video src="${videoUrl}" controls style="width:100%; border-radius: 5px;"></video>
-      `;
-
-      if (feed.children[0] && feed.children[0].tagName === 'P') {
-        feed.innerHTML = '';
-      }
-
-      feed.prepend(post);
-      fileInput.value = '';
-      titleInput.value = '';
-      showPage('home');
-    }
-  </script>
 </body>
 </html>
