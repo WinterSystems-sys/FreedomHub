@@ -164,7 +164,6 @@
 
     let allPostsData = [];
 
-    // UNIQUE DEVICE / SESSION USER ID GENERATOR
     function getUserId() {
       let uid = localStorage.getItem('fh_user_id');
       if (!uid) {
@@ -231,6 +230,37 @@
         alert('Profile saved globally!');
       } catch (err) {
         alert('Error saving profile: ' + err.message);
+      }
+    };
+
+    // RETROACTIVE FIX: Updates older posts missing creator info
+    window.claimAnonymousPosts = async function() {
+      const currentUsername = document.getElementById('username').value.trim();
+      if (!currentUsername || currentUsername === 'Anonymous') {
+        alert('Please enter and save a custom Username on your Profile first!');
+        return;
+      }
+
+      alert('Scanning for unassigned videos to claim...');
+
+      try {
+        const querySnapshot = await getDocs(collection(db, "posts"));
+        let updatedCount = 0;
+
+        for (const docSnap of querySnapshot.docs) {
+          const post = docSnap.data();
+          if (!post.creator || post.creator === 'Anonymous') {
+            await updateDoc(doc(db, "posts", docSnap.id), {
+              creator: currentUsername
+            });
+            updatedCount++;
+          }
+        }
+
+        alert(`Success! Updated ${updatedCount} video(s) to @${currentUsername}.`);
+        loadFeed();
+      } catch (err) {
+        alert('Error updating old videos: ' + err.message);
       }
     };
 
@@ -529,6 +559,7 @@
       <input type="text" id="username" placeholder="In-App Username">
       <textarea id="bio" placeholder="Tell people about yourself"></textarea>
       <button onclick="saveProfile()">Save Profile</button>
+      <button onclick="claimAnonymousPosts()" style="background: linear-gradient(135deg, #059669, #0284c7); margin-top: 8px;">Claim Anonymous Videos</button>
     </div>
   </div>
 
@@ -556,5 +587,4 @@
   <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
 
 </body>
-    </html>
-    
+</html>
