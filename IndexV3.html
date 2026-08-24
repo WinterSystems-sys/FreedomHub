@@ -52,6 +52,25 @@
     }
     .btn-google { background: #ea4335; }
     .btn-secondary { background: #334155; }
+    .profile-avatar {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background-color: #3b82f6;
+      background-size: cover;
+      background-position: center;
+      margin: 0 auto 15px auto;
+      border: 3px solid #a855f7;
+      cursor: pointer;
+    }
+    .creator-link {
+      color: #38bdf8;
+      font-weight: bold;
+      cursor: pointer;
+      text-decoration: underline;
+      display: inline-block;
+      margin-top: 4px;
+    }
     .thumbnail-container {
       position: relative;
       width: 100%;
@@ -78,10 +97,8 @@
       font-size: 20px;
     }
 
-    /* --- V4.4 Shorts Layout (Snap Stream) --- */
-    .shorts-page {
-      padding: 0 !important;
-    }
+    /* Shorts Layout */
+    .shorts-page { padding: 0 !important; }
     #shortsContainer {
       height: calc(100vh - 120px);
       overflow-y: scroll;
@@ -96,11 +113,7 @@
       align-items: center;
       justify-content: center;
     }
-    .short-card video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
+    .short-card video { width: 100%; height: 100%; object-fit: cover; }
     .short-overlay {
       position: absolute;
       bottom: 30px;
@@ -217,7 +230,10 @@
       document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
       document.getElementById(pageId).classList.remove('hidden');
       if (pageId === 'shorts') renderShorts();
+      if (pageId === 'profile') loadProfileData();
     };
+
+    window.pickAvatar = function() { document.getElementById('avatarUpload').click(); };
 
     async function uploadToCloudinary(file, resourceType = 'auto') {
       const formData = new FormData();
@@ -227,6 +243,28 @@
       const data = await response.json();
       return data.secure_url;
     }
+
+    window.handleAvatarSelect = async function(event) {
+      const file = event.target.files[0];
+      if (!file || !currentUser) return;
+      alert('Uploading avatar...');
+      try {
+        const imageUrl = await uploadToCloudinary(file, 'image');
+        document.getElementById('userAvatar').style.backgroundImage = `url(${imageUrl})`;
+        await setDoc(doc(db, "profiles", currentUser.uid), { avatarUrl: imageUrl }, { merge: true });
+        alert('Avatar updated!');
+      } catch (err) { alert(err.message); }
+    };
+
+    window.saveProfile = async function() {
+      if (!currentUser) return;
+      const username = document.getElementById('username').value.trim() || 'Anonymous';
+      const bio = document.getElementById('bio').value;
+      try {
+        await setDoc(doc(db, "profiles", currentUser.uid), { username, bio }, { merge: true });
+        alert('Profile updated!');
+      } catch (err) { alert(err.message); }
+    };
 
     window.uploadVideo = async function() {
       if (!currentUser) return;
@@ -249,6 +287,7 @@
           title: titleInput.value.trim() || 'Untitled',
           description: descInput.value.trim() || '',
           creator: creatorName,
+          creatorUid: currentUser.uid,
           videoUrl,
           thumbnailUrl,
           likes: 0,
@@ -268,38 +307,44 @@
       try { await updateDoc(doc(db, "posts", postId), { views: increment(1) }); } catch (err) {}
     };
 
+    function renderFeedItems(posts, targetContainerId) {
+      const container = document.getElementById(targetContainerId);
+      if (!posts.length) {
+        container.innerHTML = '<p>No videos found.</p>';
+        return;
+      }
+      container.innerHTML = '';
+      posts.forEach((data) => {
+        const mediaContainerId = `media-${data.id}`;
+        let mediaHtml = data.thumbnailUrl ? `
+          <div id="${mediaContainerId}" class="thumbnail-container" onclick="playInlineVideo('${mediaContainerId}', '${data.videoUrl}', '${data.id}')">
+            <img src="${data.thumbnailUrl}" class="thumbnail-img">
+            <div class="play-overlay">▶</div>
+          </div>` : `
+          <div id="${mediaContainerId}">
+            <video src="${data.videoUrl}" controls style="width:100%; border-radius: 8px; margin-top:8px;"></video>
+          </div>`;
+
+        const post = document.createElement('div');
+        post.className = 'card';
+        post.innerHTML = `
+          <h3>${data.title || 'Untitled'}</h3>
+          <span class="creator-link" onclick="openChannel('${data.creator}')">By @${data.creator || 'Anonymous'}</span>
+          ${mediaHtml}
+          <p style="font-size:13px; color:#a78bfa;">${data.description || ''}</p>
+        `;
+        container.appendChild(post);
+      });
+    }
+
     async function loadFeed() {
-      const container = document.getElementById('feed');
       try {
         const querySnapshot = await getDocs(collection(db, "posts"));
-        container.innerHTML = '';
         cachedPosts = [];
-        
         querySnapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const id = docSnap.id;
-          cachedPosts.push({ id, ...data });
-
-          const mediaContainerId = `media-${id}`;
-          let mediaHtml = data.thumbnailUrl ? `
-            <div id="${mediaContainerId}" class="thumbnail-container" onclick="playInlineVideo('${mediaContainerId}', '${data.videoUrl}', '${id}')">
-              <img src="${data.thumbnailUrl}" class="thumbnail-img">
-              <div class="play-overlay">▶</div>
-            </div>` : `
-            <div id="${mediaContainerId}">
-              <video src="${data.videoUrl}" controls style="width:100%; border-radius: 8px; margin-top:8px;"></video>
-            </div>`;
-
-          const post = document.createElement('div');
-          post.className = 'card';
-          post.innerHTML = `
-            <h3>${data.title || 'Untitled'}</h3>
-            <span style="color:#a78bfa;">By @${data.creator || 'Anonymous'}</span>
-            ${mediaHtml}
-            <p style="font-size:13px; color:#a78bfa;">${data.description || ''}</p>
-          `;
-          container.appendChild(post);
+          cachedPosts.push({ id: docSnap.id, ...docSnap.data() });
         });
+        renderFeedItems(cachedPosts, 'feed');
       } catch (err) {}
     }
 
@@ -309,13 +354,12 @@
         container.innerHTML = '<p style="text-align:center; padding-top:40px;">No videos available.</p>';
         return;
       }
-
       container.innerHTML = cachedPosts.map(post => `
         <div class="short-card">
           <video src="${post.videoUrl}" controls loop playsinline></video>
           <div class="short-overlay">
             <h4 style="margin:0 0 4px 0; font-size:16px;">${post.title || 'Untitled'}</h4>
-            <span style="font-size:13px; color:#38bdf8;">@${post.creator || 'Anonymous'}</span>
+            <span class="creator-link" onclick="openChannel('${post.creator}')">@${post.creator || 'Anonymous'}</span>
             <p style="font-size:12px; margin:4px 0 0 0; color:#ddd;">${post.description || ''}</p>
           </div>
           <div class="short-actions">
@@ -343,9 +387,21 @@
           const profile = docSnap.data();
           document.getElementById('username').value = profile.username || '';
           document.getElementById('bio').value = profile.bio || '';
+          if (profile.avatarUrl) {
+            document.getElementById('userAvatar').style.backgroundImage = `url(${profile.avatarUrl})`;
+          }
         }
+        const myPosts = cachedPosts.filter(p => p.creatorUid === currentUser.uid);
+        renderFeedItems(myPosts, 'myUploadsContainer');
       } catch (err) {}
     }
+
+    window.openChannel = function(creatorName) {
+      document.getElementById('channelName').innerText = `@${creatorName}`;
+      const channelPosts = cachedPosts.filter(p => (p.creator || '').toLowerCase() === creatorName.toLowerCase());
+      renderFeedItems(channelPosts, 'channelVideosContainer');
+      showPage('channelOverlay');
+    };
   </script>
 </head>
 <body>
@@ -374,7 +430,9 @@
   <div id="upload" class="page hidden">
     <div class="card">
       <h2>Upload Video</h2>
-      <input type="file" id="videoFileInput" accept="video/*">
+      <label style="font-size:12px; color:#a78bfa;">Video File (Choose existing or record live)</label>
+      <input type="file" id="videoFileInput" accept="video/*" capture="environment">
+      <label style="font-size:12px; color:#a78bfa;">Thumbnail Image</label>
       <input type="file" id="thumbFileInput" accept="image/*">
       <input type="text" id="videoTitle" placeholder="Title">
       <textarea id="videoDesc" placeholder="Description"></textarea>
@@ -383,11 +441,23 @@
   </div>
 
   <div id="profile" class="page hidden">
+    <div id="userAvatar" class="profile-avatar" onclick="pickAvatar()"></div>
     <div class="card">
       <input type="text" id="username" placeholder="Username">
       <textarea id="bio" placeholder="Bio"></textarea>
-      <button onclick="handleLogout()" class="btn-secondary" style="background:#ef4444;">Log Out</button>
+      <button onclick="saveProfile()" style="margin-top:10px;">Save Profile</button>
+      <button onclick="handleLogout()" class="btn-secondary" style="background:#ef4444; margin-top:8px;">Log Out</button>
     </div>
+    <h3 style="color:#a78bfa; margin-top:20px;">My Uploads</h3>
+    <div id="myUploadsContainer"></div>
+  </div>
+
+  <div id="channelOverlay" class="page hidden">
+    <button class="btn-secondary" onclick="showPage('home')" style="width:auto; padding:6px 16px; margin-bottom:15px;">← Back</button>
+    <div class="card">
+      <h2 id="channelName" style="margin:0; color:#38bdf8;">@Creator</h2>
+    </div>
+    <div id="channelVideosContainer"></div>
   </div>
 
   <nav id="mainNavigation" class="hidden">
@@ -396,6 +466,8 @@
     <button onclick="showPage('upload')">Upload</button>
     <button onclick="showPage('profile')">Profile</button>
   </nav>
+
+  <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
 
 </body>
 </html>
