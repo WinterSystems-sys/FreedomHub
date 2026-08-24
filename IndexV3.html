@@ -234,7 +234,7 @@
           });
         }
       } catch (err) {
-        alert('Google Sign-In Error: ' + err.message);
+        alert('Google Sign-In Error: ' + err.message + '\n\nMake sure winter-systems-sys.github.io is added to Authorized Domains in Firebase Console.');
       }
     };
 
@@ -297,6 +297,41 @@
         alert('Profile updated!');
       } catch (err) {
         alert('Error saving profile: ' + err.message);
+      }
+    };
+
+    // CLAIM PREVIOUS UNASSIGNED VIDEOS
+    window.claimAnonymousPosts = async function() {
+      if (!currentUser) return;
+      const currentUsername = document.getElementById('username').value.trim();
+      
+      if (!currentUsername) {
+        alert('Please save a username first!');
+        return;
+      }
+
+      alert('Scanning Firebase for past videos...');
+
+      try {
+        const querySnapshot = await getDocs(collection(db, "posts"));
+        let count = 0;
+
+        for (const docSnap of querySnapshot.docs) {
+          const post = docSnap.data();
+          if (!post.creatorUid || post.creator === 'Anonymous') {
+            await updateDoc(doc(db, "posts", docSnap.id), {
+              creator: currentUsername,
+              creatorUid: currentUser.uid
+            });
+            count++;
+          }
+        }
+
+        alert(`Success! Reassigned ${count} previous videos to your current account.`);
+        await loadFeed();
+        await loadProfileData();
+      } catch (err) {
+        alert('Error reassigning videos: ' + err.message);
       }
     };
 
@@ -554,6 +589,7 @@
       <input type="text" id="username" placeholder="In-App Username">
       <textarea id="bio" placeholder="Tell people about yourself"></textarea>
       <button onclick="saveProfile()">Save Profile</button>
+      <button onclick="claimAnonymousPosts()" style="background: linear-gradient(135deg, #059669, #0284c7); margin-top: 8px;">Claim Anonymous Videos</button>
       <button onclick="handleLogout()" class="btn-secondary" style="margin-top: 8px;">Log Out</button>
     </div>
   </div>
@@ -573,12 +609,4 @@
   <!-- NAVIGATION -->
   <nav id="mainNavigation" class="hidden">
     <button onclick="showPage('home')">Home</button>
-    <button onclick="showPage('upload')">Upload</button>
-    <button onclick="showPage('profile')">Profile</button>
-  </nav>
-
-  <!-- HIDDEN FILE INPUT -->
-  <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
-
-</body>
-</html>
+    <button onclick="showPage('upload')">Upload
