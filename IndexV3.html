@@ -8,17 +8,21 @@
     body {
       margin: 0;
       font-family: Arial, sans-serif;
-      background-color: #121212;
+      background: radial-gradient(circle at 50% 20%, #1e1035 0%, #0d0614 60%, #05020a 100%);
+      background-attachment: fixed;
       color: #ffffff;
-      padding-bottom: 60px;
+      padding-bottom: 70px;
     }
     header {
-      background-color: #1f1f1f;
+      background: rgba(20, 10, 35, 0.85);
+      backdrop-filter: blur(8px);
       padding: 15px;
       text-align: center;
-      font-size: 20px;
+      font-size: 22px;
       font-weight: bold;
-      border-bottom: 1px solid #333;
+      border-bottom: 1px solid rgba(138, 43, 226, 0.3);
+      color: #d8b4fe;
+      text-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
     }
     .page {
       padding: 20px;
@@ -30,59 +34,109 @@
       text-align: center;
     }
     .card {
-      background: #1f1f1f;
+      background: rgba(30, 20, 50, 0.7);
+      backdrop-filter: blur(6px);
       padding: 20px;
-      border-radius: 8px;
+      border-radius: 12px;
       margin-bottom: 15px;
+      border: 1px solid rgba(168, 85, 247, 0.2);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
     }
     input, textarea, button {
       width: 100%;
       padding: 10px;
       margin-top: 10px;
-      border-radius: 5px;
-      border: 1px solid #333;
+      border-radius: 6px;
+      border: 1px solid rgba(168, 85, 247, 0.3);
       box-sizing: border-box;
-      background-color: #2b2b2b;
+      background-color: #160d26;
       color: #fff;
     }
     button {
-      background-color: #007bff;
+      background: linear-gradient(135deg, #7e22ce, #3b82f6);
       cursor: pointer;
       font-weight: bold;
       border: none;
+      transition: transform 0.1s ease;
+    }
+    button:active {
+      transform: scale(0.98);
     }
     .profile-avatar {
-      width: 120px;
-      height: 120px;
+      width: 110px;
+      height: 110px;
       border-radius: 50%;
-      background-color: #007bff;
+      background-color: #3b82f6;
       background-size: cover;
       background-position: center;
-      margin: 0 auto 15px auto;
+      margin: 0 auto 10px auto;
       cursor: pointer;
-      border: 3px solid #ffffff;
+      border: 3px solid #a855f7;
+      box-shadow: 0 0 15px rgba(168, 85, 247, 0.6);
+    }
+    .stats-container {
+      display: flex;
+      justify-content: space-around;
+      background: rgba(20, 10, 35, 0.6);
+      padding: 12px;
+      border-radius: 10px;
+      margin: 15px 0;
+      border: 1px solid rgba(168, 85, 247, 0.2);
+    }
+    .stat-box {
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 18px;
+      font-weight: bold;
+      color: #38bdf8;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: #a78bfa;
+      text-transform: uppercase;
+    }
+    .action-btn {
+      width: auto;
+      padding: 6px 12px;
+      font-size: 13px;
+      margin-top: 5px;
+      display: inline-block;
+    }
+    .comment-box {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .comment-item {
+      font-size: 13px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 6px 10px;
+      border-radius: 4px;
+      margin-top: 5px;
     }
     nav {
       position: fixed;
       bottom: 0;
       width: 100%;
-      background: #1f1f1f;
+      background: rgba(15, 8, 25, 0.95);
       display: flex;
       justify-content: space-around;
       padding: 10px 0;
-      border-top: 1px solid #333;
+      border-top: 1px solid rgba(168, 85, 247, 0.3);
     }
     nav button {
       width: auto;
       margin: 0;
       background: transparent;
+      color: #a78bfa;
     }
   </style>
 
   <!-- FIREBASE SDKs -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, arrayUnion, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // CLOUDINARY CREDENTIALS
     const CLOUD_NAME = "Ee4kulds";
@@ -98,11 +152,9 @@
       appId: "1:349898855135:web:efdc83fb3a8fd8a0f50f6a"
     };
 
-    // INITIALIZE FIREBASE
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // PAGE NAVIGATION
     window.showPage = function(pageId) {
       document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
       document.getElementById(pageId).classList.remove('hidden');
@@ -112,7 +164,6 @@
       document.getElementById('avatarUpload').click();
     };
 
-    // CLOUDINARY HELPER FUNCTION
     async function uploadToCloudinary(file, resourceType = 'auto') {
       const formData = new FormData();
       formData.append('file', file);
@@ -123,33 +174,27 @@
         body: formData
       });
 
-      if (!response.ok) {
-        throw new Error('Cloudinary upload failed');
-      }
-
+      if (!response.ok) throw new Error('Cloudinary upload failed');
       const data = await response.json();
       return data.secure_url;
     }
 
-    // HANDLE AVATAR UPLOAD FROM PHONE
     window.handleAvatarSelect = async function(event) {
       const file = event.target.files[0];
       if (!file) return;
 
-      alert('Uploading avatar to Cloudinary...');
+      alert('Uploading avatar...');
 
       try {
         const imageUrl = await uploadToCloudinary(file, 'image');
         document.querySelector('.profile-avatar').style.backgroundImage = `url(${imageUrl})`;
         localStorage.setItem('savedAvatarUrl', imageUrl);
-        alert('Avatar uploaded successfully!');
+        alert('Avatar updated!');
       } catch (err) {
-        console.error(err);
         alert('Error uploading avatar: ' + err.message);
       }
     };
 
-    // SAVE PROFILE TO FIRESTORE
     window.saveProfile = async function() {
       const username = document.getElementById('username').value;
       const bio = document.getElementById('bio').value;
@@ -160,26 +205,24 @@
           username: username,
           bio: bio,
           avatarUrl: avatarUrl
-        });
+        }, { merge: true });
         alert('Profile saved globally!');
       } catch (err) {
-        console.error(err);
         alert('Error saving profile: ' + err.message);
       }
     };
 
-    // UPLOAD VIDEO FILE FROM PHONE TO CLOUDINARY & SAVE TO FEED
     window.uploadVideo = async function() {
       const fileInput = document.getElementById('videoFileInput');
       const titleInput = document.getElementById('videoTitle');
 
       if (!fileInput.files[0]) {
-        alert('Please select a video file from your phone.');
+        alert('Please select a video file.');
         return;
       }
 
       const file = fileInput.files[0];
-      alert('Uploading video to cloud... This may take a moment depending on file size.');
+      alert('Uploading video to space cloud...');
 
       try {
         const videoUrl = await uploadToCloudinary(file, 'video');
@@ -187,6 +230,8 @@
         await addDoc(collection(db, "posts"), {
           title: titleInput.value || 'Untitled Video',
           videoUrl: videoUrl,
+          likes: 0,
+          comments: [],
           createdAt: new Date()
         });
 
@@ -194,60 +239,134 @@
         fileInput.value = '';
         titleInput.value = '';
         loadFeed();
+        loadProfileData();
         showPage('home');
       } catch (err) {
-        console.error(err);
         alert('Error publishing video: ' + err.message);
       }
     };
 
-    // FETCH LIVE FEED
+    window.likePost = async function(postId) {
+      try {
+        const postRef = doc(db, "posts", postId);
+        await updateDoc(postRef, {
+          likes: increment(1)
+        });
+        loadFeed();
+        loadProfileData(); // Re-calculate top video after likes change
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    window.addComment = async function(postId) {
+      const input = document.getElementById(`comment-input-${postId}`);
+      if (!input.value.trim()) return;
+
+      try {
+        const postRef = doc(db, "posts", postId);
+        await updateDoc(postRef, {
+          comments: arrayUnion(input.value.trim())
+        });
+        input.value = '';
+        loadFeed();
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
     async function loadFeed() {
       const feed = document.getElementById('feed');
-      feed.innerHTML = '<p>Loading feed from server...</p>';
+      feed.innerHTML = '<p>Loading galaxy stream...</p>';
 
       try {
         const querySnapshot = await getDocs(collection(db, "posts"));
         if (querySnapshot.empty) {
-          feed.innerHTML = '<p>No live videos yet. Upload one!</p>';
+          feed.innerHTML = '<p>No live videos yet. Launch one!</p>';
           return;
         }
 
         feed.innerHTML = '';
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const id = docSnap.id;
+          const commentsList = data.comments ? data.comments.map(c => `<div class="comment-item">${c}</div>`).join('') : '';
+
           const post = document.createElement('div');
           post.className = 'card';
           post.innerHTML = `
             <h3>${data.title}</h3>
-            <video src="${data.videoUrl}" controls style="width:100%; border-radius: 5px;"></video>
+            <video src="${data.videoUrl}" controls style="width:100%; border-radius: 8px;"></video>
+            <div style="margin-top:8px;">
+              <button class="action-btn" onclick="likePost('${id}')">❤️ Like (${data.likes || 0})</button>
+            </div>
+            <div class="comment-box">
+              <input type="text" id="comment-input-${id}" placeholder="Add a comment...">
+              <button class="action-btn" onclick="addComment('${id}')">Post Comment</button>
+              <div style="margin-top:10px;">${commentsList}</div>
+            </div>
           `;
           feed.appendChild(post);
         });
       } catch (err) {
-        console.error(err);
         feed.innerHTML = '<p>Error loading posts.</p>';
       }
     }
 
-    // INITIAL LOAD
-    document.addEventListener('DOMContentLoaded', async function() {
-      loadFeed();
-
+    // ANALYZES POSTS & SETS THE MOST LIKED VIDEO AS TOP VIDEO
+    async function loadProfileData() {
       try {
+        // Load User Profile Data
         const docSnap = await getDoc(doc(db, "profiles", "myUser"));
         if (docSnap.exists()) {
           const data = docSnap.data();
           document.getElementById('username').value = data.username || '';
           document.getElementById('bio').value = data.bio || '';
+          document.getElementById('stat-followers').innerText = data.followersCount || 0;
+          document.getElementById('stat-following').innerText = data.followingCount || 0;
+
           if (data.avatarUrl) {
             document.querySelector('.profile-avatar').style.backgroundImage = `url(${data.avatarUrl})`;
             localStorage.setItem('savedAvatarUrl', data.avatarUrl);
           }
         }
+
+        // Analyze Posts to Find Top Video & Total Stats
+        const postsSnapshot = await getDocs(collection(db, "posts"));
+        let totalLikes = 0;
+        let totalVideos = postsSnapshot.size;
+        let topPost = null;
+        let maxLikes = -1;
+
+        postsSnapshot.forEach((docSnap) => {
+          const postData = docSnap.data();
+          const likesCount = postData.likes || 0;
+          totalLikes += likesCount;
+
+          if (likesCount > maxLikes) {
+            maxLikes = likesCount;
+            topPost = postData;
+          }
+        });
+
+        // Set Calculated Stats
+        document.getElementById('stat-likes').innerText = totalLikes;
+        document.getElementById('stat-videos').innerText = totalVideos;
+
+        // Set Most Liked Video as Top Video
+        if (topPost) {
+          document.getElementById('topVideoSection').classList.remove('hidden');
+          document.getElementById('topVideoTitle').innerText = `${topPost.title} (${maxLikes} Likes)`;
+          document.getElementById('topVideoPlayer').src = topPost.videoUrl;
+        }
       } catch (err) {
-        console.log("No profile found yet.");
+        console.log("Error evaluating profile data: ", err);
       }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      loadFeed();
+      loadProfileData();
     });
   </script>
 </head>
@@ -255,9 +374,9 @@
 
   <header>FreedomHub</header>
 
-  <!-- HOME PAGE -->
+  <!-- HOME FEED PAGE -->
   <div id="home" class="page">
-    <h2>Home Feed</h2>
+    <h2>Galaxy Feed</h2>
     <div id="feed">
       <p>Loading...</p>
     </div>
@@ -269,16 +388,44 @@
       <h2>Upload Video File</h2>
       <input type="file" id="videoFileInput" accept="video/*">
       <input type="text" id="videoTitle" placeholder="Video Title">
-      <button onclick="uploadVideo()">Post Video</button>
+      <button onclick="uploadVideo()">Launch Video</button>
     </div>
   </div>
 
   <!-- PROFILE PAGE -->
   <div id="profile" class="page hidden">
     <div class="profile-avatar" onclick="pickAvatar()"></div>
-    <p class="center" style="font-size: 12px; color: #888;">Tap circle to change photo</p>
+    <p class="center" style="font-size: 11px; color: #a78bfa;">Tap icon to change photo</p>
     
-    <div class="center">
+    <!-- DASHBOARD STATS -->
+    <div class="stats-container">
+      <div class="stat-box">
+        <div class="stat-num" id="stat-videos">0</div>
+        <div class="stat-label">Videos</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="stat-likes">0</div>
+        <div class="stat-label">Likes</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="stat-followers">0</div>
+        <div class="stat-label">Followers</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="stat-following">0</div>
+        <div class="stat-label">Following</div>
+      </div>
+    </div>
+
+    <!-- AUTOMATIC MOST-LIKED TOP VIDEO -->
+    <div id="topVideoSection" class="card hidden">
+      <h3 style="margin-top:0; color:#38bdf8;">🔥 Top Video</h3>
+      <p id="topVideoTitle" style="font-size:14px; margin-bottom:8px;"></p>
+      <video id="topVideoPlayer" controls style="width:100%; border-radius: 6px;"></video>
+    </div>
+
+    <!-- PROFILE INPUTS -->
+    <div class="card">
       <input type="text" id="username" placeholder="Username">
       <textarea id="bio" placeholder="Tell people about yourself"></textarea>
       <button onclick="saveProfile()">Save Profile</button>
@@ -292,7 +439,7 @@
     <button onclick="showPage('profile')">Profile</button>
   </nav>
 
-  <!-- HIDDEN FILE INPUT FOR AVATAR -->
+  <!-- HIDDEN FILE INPUT -->
   <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
 
 </body>
