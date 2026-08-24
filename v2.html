@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1">
+
+<title>FreedomHub V2</title>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+}
+
+body{
+background:#0f0f0f;
+color:white;
+}
+
+header{
+background:#1a1a1a;
+padding:15px;
+display:flex;
+justify-content:space-between;
+align-items:center;
+position:sticky;
+top:0;
+z-index:100;
+}
+
+.logo{
+font-size:28px;
+font-weight:bold;
+color:#4da3ff;
+}
+
+.page{
+padding:15px;
+padding-bottom:90px;
+}
+
+.hidden{
+display:none;
+}
+
+.card{
+background:#1d1d1d;
+padding:15px;
+border-radius:15px;
+margin-bottom:15px;
+}
+
+input,
+textarea{
+width:100%;
+padding:12px;
+margin:8px 0;
+border:none;
+border-radius:10px;
+background:#2a2a2a;
+color:white;
+}
+
+button{
+padding:10px 15px;
+border:none;
+border-radius:10px;
+background:#4da3ff;
+color:white;
+}
+
+.video-card{
+background:#1d1d1d;
+padding:10px;
+border-radius:15px;
+margin-bottom:15px;
+}
+
+video{
+width:100%;
+border-radius:12px;
+background:black;
+}
+
+.profile-avatar{
+width:120px;
+height:120px;
+border-radius:50%;
+margin:auto;
+background:linear-gradient(
+45deg,
+#4da3ff,
+#7c4dff
+);
+}
+
+.center{
+text-align:center;
+}
+
+.stats{
+display:flex;
+justify-content:space-around;
+margin-top:20px;
+}
+
+nav{
+
+position:fixed;
+bottom:0;
+left:0;
+right:0;
+
+background:#1a1a1a;
+
+display:flex;
+
+justify-content:space-around;
+
+padding:12px;
+
+}
+
+nav button{
+
+background:none;
+
+font-size:16px;
+
+}
+
+.comment{
+
+background:#2a2a2a;
+
+padding:10px;
+
+border-radius:8px;
+
+margin-top:6px;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<div class="logo">
+FreedomHub
+</div>
+
+</header>
+
+<!-- HOME -->
+
+<div id="home"
+class="page">
+
+<div id="feed">
+</div>
+
+</div>
+
+<!-- UPLOAD -->
+
+<div id="upload"
+class="page hidden">
+
+<div class="card">
+
+<h2>Upload Video</h2>
+
+<input
+type="file"
+id="videoInput"
+accept="video/*">
+
+<input
+type="text"
+id="videoTitle"
+placeholder="Video Title">
+
+<button
+onclick="uploadVideo()">
+
+Upload
+
+</button>
+
+</div>
+
+</div>
+
+<!-- PROFILE -->
+
+<div id="profile"
+class="page hidden">
+
+<div class="profile-avatar">
+</div>
+
+<br>
+
+<div class="center">
+
+<input
+id="username"
+placeholder="Username">
+
+<textarea
+id="bio"
+placeholder="Tell people about yourself">
+</textarea>
+
+<button
+onclick="saveProfile()">
+
+Save Profile
+
+</button>
+
+</div>
+
+<div class="stats">
+
+<div>
+
+<h3 id="postsCount">
+0
+</h3>
+
+<p>Posts</p>
+
+</div>
+
+<div>
+
+<h3 id="followersCount">
+0
+</h3>
+
+<p>Followers</p>
+
+</div>
+
+<div>
+
+<h3 id="followingCount">
+0
+</h3>
+
+<p>Following</p>
+
+</div>
+
+</div>
+
+<br>
+
+<div class="card">
+
+<h2>
+My Videos
+</h2>
+
+<div
+id="myVideos">
+
+<p>
+No videos uploaded yet.
+</p>
+
+</div>
+
+</div>
+
+  </div>
+  <!-- EXPLORE -->
+
+<div id="explore"
+class="page hidden">
+
+<div class="card">
+
+<h2>Trending</h2>
+
+<p>#Technology</p>
+<p>#Gaming</p>
+<p>#Music</p>
+<p>#Sports</p>
+<p>#Science</p>
+<p>#FreedomHub</p>
+
+</div>
+
+</div>
+
+<!-- NOTIFICATIONS -->
+
+<div id="alerts"
+class="page hidden">
+
+<div class="card">
+
+<h2>Notifications</h2>
+
+<p>No notifications yet.</p>
+
+</div>
+
+</div>
+
+<!-- NAVIGATION -->
+
+<nav>
+
+<button onclick="showPage('home')">
+🏠 Home
+</button>
+
+<button onclick="showPage('upload')">
+➕ Upload
+</button>
+
+<button onclick="showPage('explore')">
+🔥 Explore
+</button>
+
+<button onclick="showPage('profile')">
+👤 Profile
+</button>
+
+</nav>
+
+<script>
+
+let videos=[];
+
+function showPage(page){
+
+document.getElementById('home')
+.classList.add('hidden');
+
+document.getElementById('upload')
+.classList.add('hidden');
+
+document.getElementById('explore')
+.classList.add('hidden');
+
+document.getElementById('profile')
+.classList.add('hidden');
+
+document.getElementById(page)
+.classList.remove('hidden');
+
+}
+
+function saveProfile(){
+
+const username=
+document.getElementById(
+'username'
+).value;
+
+const bio=
+document.getElementById(
+'bio'
+).value;
+
+localStorage.setItem(
+'freedomhub_username',
+username
+);
+
+localStorage.setItem(
+'freedomhub_bio',
+bio
+);
+
+alert(
+'Profile Saved'
+);
+
+}
+
+function loadProfile(){
+
+document.getElementById(
+'username'
+).value=
+
+localStorage.getItem(
+'freedomhub_username'
+) || '';
+
+document.getElementById(
+'bio'
+).value=
+
+localStorage.getItem(
+'freedomhub_bio'
+) || '';
+
+}
+
+function uploadVideo(){
+
+const file=
+
+document.getElementById(
+'videoInput'
+).files[0];
+
+const title=
+
+document.getElementById(
+'videoTitle'
+).value;
+
+if(!file){
+
+alert(
+'Choose a video first'
+);
+
+return;
+
+}
+
+const url=
+
+URL.createObjectURL(file);
+
+videos.push({
+
+title:title,
+url:url
+
+});
+
+renderVideos();
+
+alert(
+'Video Uploaded'
+);
+
+}
+
+function renderVideos(){
+
+const feed=
+
+document.getElementById(
+'feed'
+);
+
+const myVideos=
+
+document.getElementById(
+'myVideos'
+);
+
+feed.innerHTML='';
+
+myVideos.innerHTML='';
+
+document.getElementById(
+'postsCount'
+).innerText=
+
+videos.length;
+
+videos.forEach(video=>{
+
+feed.innerHTML+=`
+
+<div class="video-card">
+
+<h3>${video.title}</h3>
+
+<video controls>
+
+<source src="${video.url}">
+
+</video>
+
+</div>
+
+`;
+
+myVideos.innerHTML+=`
+
+<div class="video-card">
+
+<h3>${video.title}</h3>
+
+<video controls>
+
+<source src="${video.url}">
+
+</video>
+
+</div>
+
+`;
+
+});
+
+if(videos.length===0){
+
+myVideos.innerHTML=
+
+'<p>No videos uploaded yet.</p>';
+
+}
+
+}
+
+loadProfile();
+  
+window.addEventListener(
+'load',
+()=>{
+loadProfile();
+renderVideos();
+}
+);
+
+</script>
+
+</body>
+
+</html>
