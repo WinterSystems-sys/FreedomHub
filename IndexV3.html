@@ -1,3 +1,5 @@
+
+    
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -145,7 +147,6 @@
       cursor: pointer;
     }
 
-    /* Comment Section Styling */
     .comment-item {
       background: rgba(15, 8, 25, 0.6);
       border: 1px solid rgba(168, 85, 247, 0.2);
@@ -337,6 +338,7 @@
           videoUrl,
           thumbnailUrl,
           likes: 0,
+          likedBy: [],
           views: 0,
           comments: [],
           createdAt: new Date()
@@ -358,8 +360,8 @@
       document.getElementById('watchCreator').innerText = `@${post.creator || 'Anonymous'}`;
       document.getElementById('watchDesc').innerText = post.description || '';
       document.getElementById('watchVideoPlayer').src = post.videoUrl;
-      document.getElementById('watchLikeCount').innerText = post.likes || 0;
 
+      updateWatchLikeBtnUI();
       updateFollowBtnUI(post.creatorUid);
 
       renderComments(post.comments || []);
@@ -370,12 +372,45 @@
       try { await updateDoc(doc(db, "posts", postId), { views: increment(1) }); } catch (err) {}
     };
 
-    window.likeCurrentVideo = async function() {
+    function updateWatchLikeBtnUI() {
       if (!currentActivePost) return;
+      const countSpan = document.getElementById('watchLikeCount');
+      const btn = document.getElementById('watchLikeBtn');
+      const likedBy = currentActivePost.likedBy || [];
+      const isLiked = currentUser && likedBy.includes(currentUser.uid);
+
+      if (countSpan) countSpan.innerText = currentActivePost.likes || 0;
+      if (btn) {
+        btn.innerText = `${isLiked ? '❤️ Liked' : '🤍 Like'} (${currentActivePost.likes || 0})`;
+        btn.style.background = isLiked ? 'linear-gradient(135deg, #ec4899, #8b5cf6)' : '#334155';
+      }
+    }
+
+    window.likeCurrentVideo = async function() {
+      if (!currentUser || !currentActivePost) return;
+      const postRef = doc(db, "posts", currentActivePost.id);
+      const likedBy = currentActivePost.likedBy || [];
+      const hasLiked = likedBy.includes(currentUser.uid);
+
       try {
-        await updateDoc(doc(db, "posts", currentActivePost.id), { likes: increment(1) });
-        currentActivePost.likes = (currentActivePost.likes || 0) + 1;
-        document.getElementById('watchLikeCount').innerText = currentActivePost.likes;
+        if (hasLiked) {
+          // Unlike video
+          await updateDoc(postRef, {
+            likes: increment(-1),
+            likedBy: arrayRemove(currentUser.uid)
+          });
+          currentActivePost.likes = Math.max(0, (currentActivePost.likes || 1) - 1);
+          currentActivePost.likedBy = likedBy.filter(uid => uid !== currentUser.uid);
+        } else {
+          // Like video
+          await updateDoc(postRef, {
+            likes: increment(1),
+            likedBy: arrayUnion(currentUser.uid)
+          });
+          currentActivePost.likes = (currentActivePost.likes || 0) + 1;
+          currentActivePost.likedBy.push(currentUser.uid);
+        }
+        updateWatchLikeBtnUI();
         await loadFeed();
       } catch (err) { alert(err.message); }
     };
@@ -500,56 +535,16 @@
         container.innerHTML = '<p style="text-align:center; padding-top:40px;">No videos available.</p>';
         return;
       }
-      container.innerHTML = cachedPosts.map(post => `
-        <div class="short-card">
-          <video src="${post.videoUrl}" controls loop playsinline></video>
-          <div class="short-overlay">
-            <h4 style="margin:0 0 4px 0; font-size:16px;">${post.title || 'Untitled'}</h4>
-            <span class="creator-link" onclick="openChannel('${post.creator}')">@${post.creator || 'Anonymous'}</span>
-            <p style="font-size:12px; margin:4px 0 0 0; color:#ddd;">${post.description || ''}</p>
-          </div>
-          <div class="short-actions">
-            <button class="short-btn" onclick="likeShort('${post.id}')">❤️</button>
-            <span style="font-size:11px;">${post.likes || 0}</span>
-          </div>
-        </div>
-      `).join('');
-    }
-
-    window.likeShort = async function(postId) {
-      try {
-        await updateDoc(doc(db, "posts", postId), { likes: increment(1) });
-        const post = cachedPosts.find(p => p.id === postId);
-        if (post) post.likes = (post.likes || 0) + 1;
-        renderShorts();
-      } catch (err) {}
-    };
-
-    async function loadProfileData() {
-      if (!currentUser) return;
-      try {
-        const docSnap = await getDoc(doc(db, "profiles", currentUser.uid));
-        if (docSnap.exists()) {
-          const profile = docSnap.data();
-          document.getElementById('username').value = profile.username || '';
-          document.getElementById('bio').value = profile.bio || '';
-          if (profile.avatarUrl) {
-            document.getElementById('userAvatar').style.backgroundImage = `url(${profile.avatarUrl})`;
-          }
-        }
-        const myPosts = cachedPosts.filter(p => p.creatorUid === currentUser.uid);
-        renderFeedItems(myPosts, 'myUploadsContainer');
-      } catch (err) {}
-    }
-
-    window.openChannel = function(creatorName) {
-      document.getElementById('channelName').innerText = `@${creatorName}`;
-      const channelPosts = cachedPosts.filter(p => (p.creator || '').toLowerCase() === (creatorName || '').toLowerCase());
-      renderFeedItems(channelPosts, 'channelVideosContainer');
-      showPage('channelOverlay');
-    };
-  </script>
-</head>
+      container.innerHTML = cachedPosts.map(post => {
+        const likedBy = post.likedBy || [];
+        const isLiked = currentUser && likedBy.includes(currentUser.uid);
+        return `
+          <div class="short-card">
+            <video src="${post.videoUrl}" controls loop playsinline></video>
+            <div class="short-overlay">
+              <h4 style="margin:0 0 4px 0; font-size:16px;">${post.title || 'Untitled'}</h4>
+              <span class="creator-link" onclick="openChannel('${post.creator}')">@${post.creator || 'Anonymous'}</span>
+              <p style="font-size:12p
 <body>
 
   <header>FreedomHub V4.5</header>
