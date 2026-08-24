@@ -147,11 +147,9 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, arrayUnion, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // CLOUDINARY CREDENTIALS
     const CLOUD_NAME = "Ee4kulds";
     const UPLOAD_PRESET = "nzhyyeps";
 
-    // FIREBASE CONFIGURATION
     const firebaseConfig = {
       apiKey: "AIzaSyAmfO22_KVc-Hi5thsEyu7BBXBaMAa4luM",
       authDomain: "freedomhub-a710b.firebaseapp.com",
@@ -165,6 +163,16 @@
     const db = getFirestore(app);
 
     let allPostsData = [];
+
+    // UNIQUE DEVICE / SESSION USER ID GENERATOR
+    function getUserId() {
+      let uid = localStorage.getItem('fh_user_id');
+      if (!uid) {
+        uid = 'user_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('fh_user_id', uid);
+      }
+      return uid;
+    }
 
     window.showPage = function(pageId) {
       document.querySelectorAll('.page').forEach(page => page.classList.add('hidden'));
@@ -207,12 +215,14 @@
     };
 
     window.saveProfile = async function() {
-      const username = document.getElementById('username').value || 'Anonymous';
+      const usernameInput = document.getElementById('username').value.trim();
+      const username = usernameInput || 'Anonymous';
       const bio = document.getElementById('bio').value;
       const avatarUrl = localStorage.getItem('savedAvatarUrl') || '';
+      const uid = getUserId();
 
       try {
-        await setDoc(doc(db, "profiles", "myUser"), {
+        await setDoc(doc(db, "profiles", uid), {
           username: username,
           bio: bio,
           avatarUrl: avatarUrl
@@ -227,7 +237,19 @@
     window.uploadVideo = async function() {
       const fileInput = document.getElementById('videoFileInput');
       const titleInput = document.getElementById('videoTitle');
-      const creatorName = localStorage.getItem('currentUsername') || document.getElementById('username').value || 'Anonymous';
+      
+      let creatorName = localStorage.getItem('currentUsername') || document.getElementById('username').value.trim();
+      
+      if (!creatorName || creatorName === 'Anonymous') {
+        const promptedName = prompt("Please enter your in-app Username for FreedomHub:", "Creator1");
+        if (promptedName && promptedName.trim()) {
+          creatorName = promptedName.trim();
+          document.getElementById('username').value = creatorName;
+          saveProfile();
+        } else {
+          creatorName = 'Anonymous';
+        }
+      }
 
       if (!fileInput.files[0]) {
         alert('Please select or record a video file.');
@@ -241,7 +263,7 @@
         const videoUrl = await uploadToCloudinary(file, 'video');
 
         await addDoc(collection(db, "posts"), {
-          title: titleInput.value || 'Untitled Video',
+          title: titleInput.value.trim() || 'Untitled Video',
           creator: creatorName,
           videoUrl: videoUrl,
           likes: 0,
@@ -252,8 +274,8 @@
         alert('Video published live!');
         fileInput.value = '';
         titleInput.value = '';
-        loadFeed();
-        loadProfileData();
+        await loadFeed();
+        await loadProfileData();
         showPage('home');
       } catch (err) {
         alert('Error publishing video: ' + err.message);
@@ -289,28 +311,40 @@
       }
     };
 
-    // OPEN CREATOR CHANNEL OVERLAY
     window.openChannel = function(creatorName) {
+      const currentLocalUser = localStorage.getItem('currentUsername') || 'Anonymous';
+      
+      if (creatorName.toLowerCase() === currentLocalUser.toLowerCase() && creatorName !== 'Anonymous') {
+        showPage('profile');
+        return;
+      }
+
       document.getElementById('channelName').innerText = `@${creatorName}`;
       
-      const channelVideos = allPostsData.filter(p => (p.creator || 'Anonymous').toLowerCase() === creatorName.toLowerCase());
+      const channelVideos = allPostsData.filter(p => {
+        const c = p.data.creator || 'Anonymous';
+        return c.toLowerCase() === creatorName.toLowerCase();
+      });
+      
       const container = document.getElementById('channelVideosContainer');
       
       if (channelVideos.length === 0) {
         container.innerHTML = '<p style="font-size:13px; color:#aaa;">No public videos found for this creator.</p>';
       } else {
-        container.innerHTML = channelVideos.map(v => `
-          <div style="margin-top:10px; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px;">
-            <p style="font-size:13px; margin:0 0 5px 0;">${v.title}</p>
-            <video src="${v.videoUrl}" controls style="width:100%; border-radius:4px;"></video>
-          </div>
-        `).join('');
+        container.innerHTML = channelVideos.map(v => {
+          const vTitle = v.data.title || 'Untitled Video';
+          return `
+            <div style="margin-top:10px; background:rgba(0,0,0,0.3); padding:8px; border-radius:6px;">
+              <p style="font-size:13px; margin:0 0 5px 0;"><strong>${vTitle}</strong></p>
+              <video src="${v.data.videoUrl}" controls style="width:100%; border-radius:4px;"></video>
+            </div>
+          `;
+        }).join('');
       }
 
       showPage('channelOverlay');
     };
 
-    // RENDER FEED CARDS
     function renderFeedItems(posts) {
       const feed = document.getElementById('feed');
       if (posts.length === 0) {
@@ -322,13 +356,14 @@
       posts.forEach((item) => {
         const data = item.data;
         const id = item.id;
+        const videoTitle = data.title || 'Untitled Video';
         const creator = data.creator || 'Anonymous';
         const commentsList = data.comments ? data.comments.map(c => `<div class="comment-item">${c}</div>`).join('') : '';
 
         const post = document.createElement('div');
         post.className = 'card';
         post.innerHTML = `
-          <h3 style="margin-bottom:2px;">${data.title}</h3>
+          <h3 style="margin-bottom:2px;">${videoTitle}</h3>
           <span class="creator-link" onclick="openChannel('${creator}')">By @${creator}</span>
           <video src="${data.videoUrl}" controls style="width:100%; border-radius: 8px; margin-top:8px;"></video>
           <div style="margin-top:8px;">
@@ -344,7 +379,6 @@
       });
     }
 
-    // SEARCH FILTER
     window.filterFeed = function() {
       const query = document.getElementById('searchInput').value.toLowerCase().trim();
       if (!query) {
@@ -353,7 +387,7 @@
       }
 
       const filtered = allPostsData.filter(item => {
-        const titleMatch = (item.data.title || '').toLowerCase().includes(query);
+        const titleMatch = (item.data.title || 'Untitled Video').toLowerCase().includes(query);
         const creatorMatch = (item.data.creator || 'Anonymous').toLowerCase().includes(query);
         return titleMatch || creatorMatch;
       });
@@ -384,16 +418,17 @@
     }
 
     async function loadProfileData() {
+      const uid = getUserId();
       try {
-        const docSnap = await getDoc(doc(db, "profiles", "myUser"));
+        const docSnap = await getDoc(doc(db, "profiles", uid));
         if (docSnap.exists()) {
           const data = docSnap.data();
-          const username = data.username || 'Anonymous';
+          const username = data.username || '';
           document.getElementById('username').value = username;
           document.getElementById('bio').value = data.bio || '';
           document.getElementById('stat-followers').innerText = data.followersCount || 0;
           document.getElementById('stat-following').innerText = data.followingCount || 0;
-          localStorage.setItem('currentUsername', username);
+          if (username) localStorage.setItem('currentUsername', username);
 
           if (data.avatarUrl) {
             document.querySelector('.profile-avatar').style.backgroundImage = `url(${data.avatarUrl})`;
@@ -423,7 +458,7 @@
 
         if (topPost) {
           document.getElementById('topVideoSection').classList.remove('hidden');
-          document.getElementById('topVideoTitle').innerText = `${topPost.title} (${maxLikes} Likes)`;
+          document.getElementById('topVideoTitle').innerText = `${topPost.title || 'Untitled Video'} (${maxLikes} Likes)`;
           document.getElementById('topVideoPlayer').src = topPost.videoUrl;
         }
       } catch (err) {
@@ -444,16 +479,13 @@
   <!-- HOME FEED PAGE -->
   <div id="home" class="page">
     <h2>Galaxy Feed</h2>
-    
-    <!-- SEARCH BAR -->
     <input type="text" id="searchInput" placeholder="🔍 Search songs or creators..." onkeyup="filterFeed()">
-    
     <div id="feed" style="margin-top: 15px;">
       <p>Loading...</p>
     </div>
   </div>
 
-  <!-- UPLOAD PAGE WITH DIRECT CAMERA CAPTURE -->
+  <!-- UPLOAD PAGE -->
   <div id="upload" class="page hidden">
     <div class="card">
       <h2>Record or Upload Video</h2>
@@ -494,7 +526,7 @@
     </div>
 
     <div class="card">
-      <input type="text" id="username" placeholder="Username">
+      <input type="text" id="username" placeholder="In-App Username">
       <textarea id="bio" placeholder="Tell people about yourself"></textarea>
       <button onclick="saveProfile()">Save Profile</button>
     </div>
@@ -524,5 +556,5 @@
   <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarSelect(event)">
 
 </body>
-</html>
-
+    </html>
+    
